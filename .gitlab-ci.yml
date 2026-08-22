@@ -3,6 +3,7 @@
 stages: [validate, deploy]
 
 default:
+  tags: [azure-runner]   # group runner del subgroup Logistico (vedi Runners del progetto)
   image: python:3.11
 
 validate:
