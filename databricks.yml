@@ -1,0 +1,91 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Logistico 2.0 — Databricks Asset Bundle root
+# Versione: 3.0.0 — 2026-06-08
+#
+# Pattern adottato: i job sono definiti come file YAML separati in `workflows/*.yml`
+# e inclusi qui via `include`. Single source of truth per ogni workflow.
+# Le variabili globali e i target dev/stage/prod sono dichiarati di seguito.
+# ─────────────────────────────────────────────────────────────────────────────
+
+bundle:
+  name: logistica_20
+
+include:
+  - workflows/*.yml
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Variabili globali (override per target)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BROWNFIELD (integrazione nel DWW esistente) — valori risolti per target dev/prod.
+# I default qui sotto riflettono le decisioni D2/D3 di 11_devops_handoff_databricks.md:
+#   - D3 landing = UC Volume in landing_<env>.logistica.files  -> /Volumes/...
+#   - D2 anagrafiche cdt_dw in schema proprio condiviso         -> <catalog_bronze>.condiviso
+# Se il team DWW conferma valori diversi (ADLS external / config catalog / riuso anagrafiche),
+# sovrascrivere QUI e/o nei blocchi targets.dev|prod. I workflow ereditano via ${var.*}.
+# ─────────────────────────────────────────────────────────────────────────────
+variables:
+  env:
+    description: "Ambiente di esecuzione (dev|prod)"
+    default: dev
+  landing_base_path:
+    description: "Root landing (D3). Default UC Volume; per ADLS external usare abfss://<container>@<account>.dfs.core.windows.net"
+    default: "/Volumes/landing_dev/logistica/files"
+  retail_master_schema:
+    description: "Catalog.schema anagrafiche condivise LU_* (D2). Default schema proprio condiviso in Bronze."
+    default: "bronze_dev.condiviso"
+  email_alert:
+    description: "Email destinatario per alert failure"
+    default: luigi.scrimitore@aperion.it
+
+# NB (ADR-0009): i job girano su compute SERVERLESS — nessun job cluster classico.
+# Le variabili `spark_version` / `node_type_id` sono state rimosse (2026-08-04, ACT_9007):
+# su serverless runtime e sizing sono gestiti da Databricks. Il wheel `logistica_utils`
+# e' dichiarato come dipendenza nell'`environments` di ciascun workflow.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Workspace defaults
+# ─────────────────────────────────────────────────────────────────────────────
+
+workspace:
+  host: ${DATABRICKS_HOST}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Artefatto Python (wheel logistica_utils)
+# ─────────────────────────────────────────────────────────────────────────────
+
+artifacts:
+  logistica_wheel:
+    type: whl
+    path: lib/
+    build: "pip install build && python -m build --wheel"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Target di deploy
+# ─────────────────────────────────────────────────────────────────────────────
+
+targets:
+
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: ${DATABRICKS_HOST}
+      root_path: /Workspace/data-platform/etl/logistica/${bundle.target}
+    variables:
+      env: dev
+      email_alert: luigi.scrimitore@aperion.it
+      landing_base_path: "/Volumes/landing_dev/logistica/files"
+      retail_master_schema: "bronze_dev.condiviso"
+
+  prod:
+    mode: production
+    workspace:
+      host: ${DATABRICKS_HOST_PROD}
+      root_path: /Workspace/data-platform/etl/logistica/${bundle.target}
+    variables:
+      env: prod
+      email_alert: luigi.scrimitore@aperion.it
+      landing_base_path: "/Volumes/landing_prod/logistica/files"
+      retail_master_schema: "bronze_prod.condiviso"

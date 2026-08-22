@@ -1,0 +1,248 @@
+###############################################################################
+# Logistico 2.0 — Workflow: logistica_datamart (ex logistica_aggregati)
+# Versione: 3.0.0 — 2026-06-08
+# Schedule: ogni giorno 06:00 Europe/Rome
+# Dipende da: tutti i workflow giornalieri (fact F_* gia' calcolate).
+###############################################################################
+
+name: logistica_datamart
+description: |
+  Calcolo aggregati DataMart gold_prod.logistica_dm.A_* (solo GROUP BY su fact F_*):
+    - A_INBOUND_MENSILE       (da F_CARICO)
+    - A_GIACENZE_MONTHLY      (da F_GIACENZE_DAILY)
+    - A_STOCK_MENSILE         (da A_GIACENZE_MONTHLY)
+    - A_OUTBOUND_MENSILE      (da F_ORDINI + F_TRASPORTO)
+    - A_PRODUTTIVITA_MENSILE  (da F_PREP_SPED, misure cartoni/quintali - OP-27)
+    - A_TURNO_PREP_SITO       (da F_PREP_SPED, giornaliero)
+  replaceWhere su ANNO_MESE / DATA_PREPARAZ per idempotenza.
+
+schedule:
+  quartz_cron_expression: "0 0 6 * * ?"
+  timezone_id: "Europe/Rome"
+  pause_status: UNPAUSED
+
+email_notifications:
+  on_failure:
+    - luigi.scrimitore@aperion.it
+  on_success:
+    - luigi.scrimitore@aperion.it
+  no_alert_for_skipped_runs: true
+
+max_concurrent_runs: 1
+
+tags:
+  domain: logistica
+  layer: datamart
+  project: logistico_20
+
+parameters:
+  - name: env
+    default: "dev"
+  - name: run_date
+    default: "{{job.start_time.iso_date}}"
+
+# --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
+# Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
+# (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
+# serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
+# conf vanno impostate a livello di sessione nel notebook (ADR-0015).
+# Dipendenze: environment job-level (override del "Notebook Environment").
+environments:
+  - environment_key: default
+    spec:
+      environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
+      dependencies:
+        - ../lib/dist/logistica_utils-*.whl
+
+tasks:
+
+  # -- LAD resolver: risolve gli orphan -1 nei fact PRIMA degli aggregati (OP-32 L-03) --
+
+  - task_key: lad_f_carico
+    description: "LAD resolver su F_CARICO"
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        fact_table: "F_CARICO"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 1
+    timeout_seconds: 3600
+
+  - task_key: lad_f_prep_sped
+    description: "LAD resolver su F_PREP_SPED"
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        fact_table: "F_PREP_SPED"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 1
+    timeout_seconds: 3600
+
+  - task_key: lad_f_turno_prep_sito
+    description: "LAD resolver su F_TURNO_PREP_SITO"
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        fact_table: "F_TURNO_PREP_SITO"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 1
+    timeout_seconds: 3600
+
+  - task_key: lad_f_trasporto
+    description: "LAD resolver su F_TRASPORTO"
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        fact_table: "F_TRASPORTO"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 1
+    timeout_seconds: 3600
+
+  - task_key: lad_f_ordini
+    description: "LAD resolver su F_ORDINI"
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        fact_table: "F_ORDINI"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 1
+    timeout_seconds: 3600
+
+
+  # -- Gold (dim/fact/aggregati) ------------------------
+
+  - task_key: gold_a_inbound_mensile
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_a_inbound_mensile
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_a_outbound_mensile
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_a_outbound_mensile
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_a_produttivita_mensile
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_a_produttivita_mensile
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_a_stock_mensile
+    depends_on:
+      - task_key: gold_dm_giacenze_monthly
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_a_stock_mensile
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_dm_giacenze_monthly
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_dm_giacenze_monthly
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_dm_turno_prep_sito
+    depends_on:
+      - task_key: lad_f_carico
+      - task_key: lad_f_prep_sped
+      - task_key: lad_f_turno_prep_sito
+      - task_key: lad_f_trasporto
+      - task_key: lad_f_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/aggregati/gold_dm_turno_prep_sito
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+
+  # -- DQ gate (ACT_9010) ----------------------------------
+
+  - task_key: dq_gate
+    description: "DQ gate: acceptance criteria + persistenza esiti + blocco su BLOCKING"
+    depends_on:
+      - task_key: gold_a_inbound_mensile
+      - task_key: gold_a_outbound_mensile
+      - task_key: gold_a_produttivita_mensile
+      - task_key: gold_a_stock_mensile
+      - task_key: gold_dm_giacenze_monthly
+      - task_key: gold_dm_turno_prep_sito
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/dq/dq_gate
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        pipelines: "gold_a_inbound_mensile"
+        gate: "true"
+    max_retries: 0
+    timeout_seconds: 1800

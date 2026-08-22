@@ -1,0 +1,29 @@
+# logistico-workflows — validate/deploy del Databricks Asset Bundle.
+# Secret CI/CD (ADR-0005, masked per-repo): DATABRICKS_HOST, DATABRICKS_TOKEN.
+stages: [validate, deploy]
+
+default:
+  image: python:3.11
+
+validate:
+  stage: validate
+  script:
+    - pip install databricks-cli   # TODO: pinnare la versione della Databricks CLI
+    - databricks bundle validate
+  # TODO: installare il wheel di logistico-lib dal Package Registry (DBR-05) e
+  #       pinnare la versione in databricks.yml (libraries: - whl: ...).
+
+deploy_dev:
+  stage: deploy
+  script:
+    - databricks bundle deploy -t dev
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_prod:
+  stage: deploy
+  script:
+    - databricks bundle deploy -t prod
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual   # gate PROD manuale (ADR-0017 / ACT_0.2.4)

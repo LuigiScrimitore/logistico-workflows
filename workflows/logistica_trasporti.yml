@@ -1,0 +1,244 @@
+###############################################################################
+# Logistico 2.0 — Workflow: logistica_trasporti
+# Versione: 3.0.0 — 2026-06-08
+# Schedule: ogni giorno 05:00 Europe/Rome
+# Dipende da: logistica_carichi (Bronze sto_tes_carichi -> silver_ordini),
+#             logistica_landing_ingestion (Bronze t_trasp_mtv per silver_trasporti).
+# NOTE: i 4 Bronze JDBC residui (OP-26) sono ESCLUSI dallo scheduling fino a migrazione.
+###############################################################################
+
+name: logistica_trasporti
+description: |
+  Pipeline trasporti + ordini:
+    - Silver ordini (da bronze.sto_tes_carichi, area carichi)
+    - Silver trasporti / swap / costo_trasporto (da bronze.t_trasp_mtv CND)
+    - Gold F_ORDINI (replaceWhere ANNO_MESE) + F_TRASPORTO (replaceWhere DATA_BOLLA).
+  AREA NON CORE (flag header sui notebook). Quantita'/lead time disponibili come PROXY (OP-27).
+
+schedule:
+  quartz_cron_expression: "0 0 5 * * ?"
+  timezone_id: "Europe/Rome"
+  pause_status: UNPAUSED
+
+email_notifications:
+  on_failure:
+    - luigi.scrimitore@aperion.it
+  no_alert_for_skipped_runs: true
+
+max_concurrent_runs: 1
+
+tags:
+  domain: logistica
+  area: trasporti
+  project: logistico_20
+
+parameters:
+  - name: env
+    default: "dev"
+  - name: run_date
+    default: "{{job.start_time.iso_date}}"
+
+# --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
+# Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
+# (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
+# serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
+# conf vanno impostate a livello di sessione nel notebook (ADR-0015).
+# Dipendenze: environment job-level (override del "Notebook Environment").
+environments:
+  - environment_key: default
+    spec:
+      environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
+      dependencies:
+        - ../lib/dist/logistica_utils-*.whl
+
+tasks:
+
+  # -- Bronze (landing -> Delta) ------------------------
+
+  - task_key: bronze_automezzi
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/bronze/trasporti/bronze_automezzi
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        landing_base_path: "{{job.parameters.landing_base_path}}"
+        file_format: "{{job.parameters.file_format}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: bronze_spedizioni
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/bronze/trasporti/bronze_spedizioni
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        landing_base_path: "{{job.parameters.landing_base_path}}"
+        file_format: "{{job.parameters.file_format}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: bronze_trasporti
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/bronze/trasporti/bronze_trasporti
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        landing_base_path: "{{job.parameters.landing_base_path}}"
+        file_format: "{{job.parameters.file_format}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: bronze_vettori
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/bronze/trasporti/bronze_vettori
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        landing_base_path: "{{job.parameters.landing_base_path}}"
+        file_format: "{{job.parameters.file_format}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: bronze_vettori_track
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/bronze/trasporti/bronze_vettori_track
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        landing_base_path: "{{job.parameters.landing_base_path}}"
+        file_format: "{{job.parameters.file_format}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+
+  # -- Silver (cleansing + curated) ------------------------
+
+  - task_key: silver_t_vettori
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/cdt_estr/silver_t_vettori
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_automezzi_clean
+    depends_on:
+      - task_key: bronze_automezzi
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_automezzi_clean
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_ordini
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_prep_ordini
+    depends_on:
+      - task_key: silver_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_prep_ordini
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_prep_trasporto
+    depends_on:
+      - task_key: silver_spedizioni_clean
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_prep_trasporto
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_spedizioni_clean
+    depends_on:
+      - task_key: bronze_spedizioni
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_spedizioni_clean
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: silver_vettori_clean
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/silver/trasporti/silver_vettori_clean
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+
+  # -- Gold (dim/fact/aggregati) ------------------------
+
+  - task_key: gold_f_ordini
+    depends_on:
+      - task_key: silver_prep_ordini
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/trasporti/gold_f_ordini
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        retail_master_schema: "{{job.parameters.retail_master_schema}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+  - task_key: gold_f_trasporto
+    depends_on:
+      - task_key: silver_prep_trasporto
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/gold/trasporti/gold_f_trasporto
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+    max_retries: 2
+    timeout_seconds: 7200
+
+
+  # -- DQ gate (ACT_9010) ----------------------------------
+
+  - task_key: dq_gate
+    description: "DQ gate: acceptance criteria + persistenza esiti + blocco su BLOCKING"
+    depends_on:
+      - task_key: gold_f_ordini
+      - task_key: gold_f_trasporto
+    environment_key: default
+    notebook_task:
+      notebook_path: ../notebooks/dq/dq_gate
+      base_parameters:
+        env: "{{job.parameters.env}}"
+        run_date: "{{job.parameters.run_date}}"
+        pipelines: "gold_f_ordini,gold_f_trasporto"
+        gate: "true"
+    max_retries: 0
+    timeout_seconds: 1800
