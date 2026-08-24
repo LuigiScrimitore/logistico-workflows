@@ -1,318 +1,321 @@
-###############################################################################
-# Logistico 2.0 — Workflow: logistica_prep_sped
-# Versione: 3.0.0 — 2026-06-08
-# Schedule: ogni giorno 04:30 Europe/Rome
-# Dipende da: logistica_landing_ingestion (STAT riepiloghi/bolle + CND t_prep_sped gia' caricati)
-###############################################################################
+resources:
+  jobs:
+    logistica_prep_sped:
+      ###############################################################################
+      # Logistico 2.0 — Workflow: logistica_prep_sped
+      # Versione: 3.0.0 — 2026-06-08
+      # Schedule: ogni giorno 04:30 Europe/Rome
+      # Dipende da: logistica_landing_ingestion (STAT riepiloghi/bolle + CND t_prep_sped gia' caricati)
+      ###############################################################################
 
-name: logistica_prep_sped
-description: |
-  Pipeline preparazione spedizioni + carrellisti:
-    - Bronze Logistix (DELTA_MERGE): DETTAGLIO_CARR, IMBFMOVIM (OP-14 due tabelle distinte), CARTELLINO.
-    - Silver: prep_riepilogo + prep_bolle (testata/dettaglio) + timbrature_sessioni
-              + prep_sped_integrata (consolidamento OP-17) + missione/sessione carrellista.
-    - Gold:   F_PREP_SPED (regola 30 min attrezzaggio rivista OP-27),
-              F_MOVIMENTAZIONE_CARRELLISTI (no ORE_PRODUTTIVE, OP-27).
+      name: logistica_prep_sped
+      description: |
+        Pipeline preparazione spedizioni + carrellisti:
+          - Bronze Logistix (DELTA_MERGE): DETTAGLIO_CARR, IMBFMOVIM (OP-14 due tabelle distinte), CARTELLINO.
+          - Silver: prep_riepilogo + prep_bolle (testata/dettaglio) + timbrature_sessioni
+                    + prep_sped_integrata (consolidamento OP-17) + missione/sessione carrellista.
+          - Gold:   F_PREP_SPED (regola 30 min attrezzaggio rivista OP-27),
+                    F_MOVIMENTAZIONE_CARRELLISTI (no ORE_PRODUTTIVE, OP-27).
 
-schedule:
-  quartz_cron_expression: "0 30 4 * * ?"
-  timezone_id: "Europe/Rome"
-  pause_status: UNPAUSED
+      schedule:
+        quartz_cron_expression: "0 30 4 * * ?"
+        timezone_id: "Europe/Rome"
+        pause_status: UNPAUSED
 
-email_notifications:
-  on_failure:
-    - luigi.scrimitore@aperion.it
-  no_alert_for_skipped_runs: true
+      email_notifications:
+        on_failure:
+          - luigi.scrimitore@aperion.it
+        no_alert_for_skipped_runs: true
 
-max_concurrent_runs: 1
+      max_concurrent_runs: 1
 
-tags:
-  domain: logistica
-  area: prep_spedizioni
-  project: logistico_20
+      tags:
+        domain: logistica
+        area: prep_spedizioni
+        project: logistico_20
 
-parameters:
-  - name: env
-    default: "dev"
-  - name: run_date
-    default: "{{job.start_time.iso_date}}"
-  - name: landing_base_path
-    default: ${var.landing_base_path}
-  - name: file_format
-    default: "auto"
-  - name: siti
-    default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
+      parameters:
+        - name: env
+          default: "dev"
+        - name: run_date
+          default: "{{job.start_time.iso_date}}"
+        - name: landing_base_path
+          default: ${var.landing_base_path}
+        - name: file_format
+          default: "auto"
+        - name: siti
+          default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
 
-# --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
-# Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
-# (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
-# serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
-# conf vanno impostate a livello di sessione nel notebook (ADR-0015).
-# Dipendenze: environment job-level (override del "Notebook Environment").
-environments:
-  - environment_key: default
-    spec:
-      environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-      dependencies:
-        - ../lib/dist/logistica_utils-*.whl
+      # --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
+      # Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
+      # (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
+      # serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
+      # conf vanno impostate a livello di sessione nel notebook (ADR-0015).
+      # Dipendenze: environment job-level (override del "Notebook Environment").
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
+            dependencies:
+              - logistica_utils==1.0.4
 
-tasks:
+      tasks:
 
-  # -- Bronze (landing -> Delta) ------------------------
+        # -- Bronze (landing -> Delta) ------------------------
 
-  - task_key: bronze_cartellino
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/carrellisti/bronze_cartellino
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-        siti: "{{job.parameters.siti}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_cartellino
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/carrellisti/bronze_cartellino
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+              siti: "{{job.parameters.siti}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_missioni_carr
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/carrellisti/bronze_missioni_carr
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-        siti: "{{job.parameters.siti}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_missioni_carr
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/carrellisti/bronze_missioni_carr
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+              siti: "{{job.parameters.siti}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_prep_bolle_righe
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_righe
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_prep_bolle_righe
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_righe
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_prep_bolle_testate
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_testate
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_prep_bolle_testate
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_testate
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_prep_riepiloghi
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_riepiloghi
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_prep_riepiloghi
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_riepiloghi
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_storico_liste
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_storico_liste
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_storico_liste
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_storico_liste
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: bronze_timbrature
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_timbrature
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-
-  # -- Silver (cleansing + curated) ------------------------
-
-  - task_key: silver_prep_prep_sped
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_prep_sped
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_prep_riepiloghi
-    depends_on:
-      - task_key: bronze_prep_riepiloghi
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_riepiloghi
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_prep_turno_prep_sito
-    depends_on:
-      - task_key: silver_prep_riepiloghi
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_turno_prep_sito
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_storico_bolle_clean
-    depends_on:
-      - task_key: bronze_prep_bolle_righe
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_clean
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_storico_bolle_uniche
-    depends_on:
-      - task_key: silver_storico_bolle_clean
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_uniche
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_storico_liste_clean
-    depends_on:
-      - task_key: bronze_storico_liste
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_clean
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_storico_liste_uniche
-    depends_on:
-      - task_key: silver_storico_liste_clean
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_uniche
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_missione_carrellista
-    depends_on:
-      - task_key: bronze_missioni_carr
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/tracciabilita/silver_missione_carrellista
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
-
-  - task_key: silver_sessione_carrellista
-    depends_on:
-      - task_key: bronze_cartellino
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/tracciabilita/silver_sessione_carrellista
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: bronze_timbrature
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_timbrature
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
 
-  # -- Gold (dim/fact/aggregati) ------------------------
+        # -- Silver (cleansing + curated) ------------------------
 
-  - task_key: gold_f_movimentazione_carrellisti
-    depends_on:
-      - task_key: silver_missione_carrellista
-      - task_key: silver_sessione_carrellista
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/carrellisti/gold_f_movimentazione_carrellisti
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_prep_prep_sped
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_prep_sped
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_f_prep_sped
-    depends_on:
-      - task_key: silver_prep_prep_sped
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_prep_sped
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        retail_master_schema: "{{job.parameters.retail_master_schema}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_prep_riepiloghi
+          depends_on:
+            - task_key: bronze_prep_riepiloghi
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_riepiloghi
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_f_turno_prep_sito
-    depends_on:
-      - task_key: silver_prep_turno_prep_sito
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_turno_prep_sito
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        retail_master_schema: "{{job.parameters.retail_master_schema}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_prep_turno_prep_sito
+          depends_on:
+            - task_key: silver_prep_riepiloghi
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_turno_prep_sito
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_storico_bolle_clean
+          depends_on:
+            - task_key: bronze_prep_bolle_righe
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_clean
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_storico_bolle_uniche
+          depends_on:
+            - task_key: silver_storico_bolle_clean
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_uniche
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_storico_liste_clean
+          depends_on:
+            - task_key: bronze_storico_liste
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_clean
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_storico_liste_uniche
+          depends_on:
+            - task_key: silver_storico_liste_clean
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_uniche
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_missione_carrellista
+          depends_on:
+            - task_key: bronze_missioni_carr
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/tracciabilita/silver_missione_carrellista
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: silver_sessione_carrellista
+          depends_on:
+            - task_key: bronze_cartellino
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/tracciabilita/silver_sessione_carrellista
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
 
-  # -- DQ gate (ACT_9010) ----------------------------------
+        # -- Gold (dim/fact/aggregati) ------------------------
 
-  - task_key: dq_gate
-    description: "DQ gate: acceptance criteria + persistenza esiti + blocco su BLOCKING"
-    depends_on:
-      - task_key: gold_f_movimentazione_carrellisti
-      - task_key: gold_f_prep_sped
-      - task_key: gold_f_turno_prep_sito
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/dq/dq_gate
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        pipelines: "gold_f_prep_sped,gold_f_turno_prep_sito,gold_f_movimentazione_carrellisti"
-        gate: "true"
-    max_retries: 0
-    timeout_seconds: 1800
+        - task_key: gold_f_movimentazione_carrellisti
+          depends_on:
+            - task_key: silver_missione_carrellista
+            - task_key: silver_sessione_carrellista
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/carrellisti/gold_f_movimentazione_carrellisti
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: gold_f_prep_sped
+          depends_on:
+            - task_key: silver_prep_prep_sped
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_prep_sped
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              retail_master_schema: "{{job.parameters.retail_master_schema}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        - task_key: gold_f_turno_prep_sito
+          depends_on:
+            - task_key: silver_prep_turno_prep_sito
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_turno_prep_sito
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              retail_master_schema: "{{job.parameters.retail_master_schema}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+
+        # -- DQ gate (ACT_9010) ----------------------------------
+
+        - task_key: dq_gate
+          description: "DQ gate: acceptance criteria + persistenza esiti + blocco su BLOCKING"
+          depends_on:
+            - task_key: gold_f_movimentazione_carrellisti
+            - task_key: gold_f_prep_sped
+            - task_key: gold_f_turno_prep_sito
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/dq/dq_gate
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              pipelines: "gold_f_prep_sped,gold_f_turno_prep_sito,gold_f_movimentazione_carrellisti"
+              gate: "true"
+          max_retries: 0
+          timeout_seconds: 1800

@@ -1,218 +1,221 @@
-###############################################################################
-# Logistico 2.0 — Workflow: logistica_dim_refresh
-# Versione: 3.0.0 — 2026-06-08
-# Schedule: ogni giorno 01:00 Europe/Rome
-# Dipende da: logistica_landing_ingestion (Bronze anagrafiche logistix/CND caricati).
-# RIMOSSI (OP-02): tutte le dim master Retail (articolo, fornitore, pdv, calendario)
-#                  -> deprecate, lette in sola lettura dal flusso Master Data Retail.
-###############################################################################
+resources:
+  jobs:
+    logistica_dim_refresh:
+      ###############################################################################
+      # Logistico 2.0 — Workflow: logistica_dim_refresh
+      # Versione: 3.0.0 — 2026-06-08
+      # Schedule: ogni giorno 01:00 Europe/Rome
+      # Dipende da: logistica_landing_ingestion (Bronze anagrafiche logistix/CND caricati).
+      # RIMOSSI (OP-02): tutte le dim master Retail (articolo, fornitore, pdv, calendario)
+      #                  -> deprecate, lette in sola lettura dal flusso Master Data Retail.
+      ###############################################################################
 
-name: logistica_dim_refresh
-description: |
-  Refresh dimensioni LOGISTICHE:
-    - Silver: dim_sito, dim_operatore, dim_corriere, dim_topografia
-    - Gold:   LU_SITO, LU_OPERATORE, LU_CORRIERE, LU_TOPOGRAFIA, LU_AREA_MERCL_LOGIS
-  Le dimensioni master (articolo/fornitore/pdv/calendario -> LU_ART_RADICE, LU_FORNITORE,
-  LU_PDV, LU_GIORNO/LU_MESE) NON sono qui: provengono dal flusso Retail Master Data (OP-02).
+      name: logistica_dim_refresh
+      description: |
+        Refresh dimensioni LOGISTICHE:
+          - Silver: dim_sito, dim_operatore, dim_corriere, dim_topografia
+          - Gold:   LU_SITO, LU_OPERATORE, LU_CORRIERE, LU_TOPOGRAFIA, LU_AREA_MERCL_LOGIS
+        Le dimensioni master (articolo/fornitore/pdv/calendario -> LU_ART_RADICE, LU_FORNITORE,
+        LU_PDV, LU_GIORNO/LU_MESE) NON sono qui: provengono dal flusso Retail Master Data (OP-02).
 
-schedule:
-  quartz_cron_expression: "0 0 1 * * ?"
-  timezone_id: "Europe/Rome"
-  pause_status: UNPAUSED
+      schedule:
+        quartz_cron_expression: "0 0 1 * * ?"
+        timezone_id: "Europe/Rome"
+        pause_status: UNPAUSED
 
-email_notifications:
-  on_failure:
-    - luigi.scrimitore@aperion.it
-  no_alert_for_skipped_runs: true
+      email_notifications:
+        on_failure:
+          - luigi.scrimitore@aperion.it
+        no_alert_for_skipped_runs: true
 
-max_concurrent_runs: 1
+      max_concurrent_runs: 1
 
-tags:
-  domain: logistica
-  area: dimensioni
-  project: logistico_20
+      tags:
+        domain: logistica
+        area: dimensioni
+        project: logistico_20
 
-parameters:
-  - name: env
-    default: "dev"
-  - name: run_date
-    default: "{{job.start_time.iso_date}}"
+      parameters:
+        - name: env
+          default: "dev"
+        - name: run_date
+          default: "{{job.start_time.iso_date}}"
 
-# --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
-# Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
-# (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
-# serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
-# conf vanno impostate a livello di sessione nel notebook (ADR-0015).
-# Dipendenze: environment job-level (override del "Notebook Environment").
-environments:
-  - environment_key: default
-    spec:
-      environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-      dependencies:
-        - ../lib/dist/logistica_utils-*.whl
+      # --- Compute: SERVERLESS (ADR-0009) ------------------------------------------
+      # Nessun `job_clusters`: i task senza compute dichiarato girano su SERVERLESS
+      # (Photon e autoscaling automatici). Le *cluster policy* NON si applicano al
+      # serverless, come init scripts e spark_conf a livello cluster: eventuali Spark
+      # conf vanno impostate a livello di sessione nel notebook (ADR-0015).
+      # Dipendenze: environment job-level (override del "Notebook Environment").
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
+            dependencies:
+              - logistica_utils==1.0.4
 
-tasks:
+      tasks:
 
-  # -- Silver (cleansing + curated) ------------------------
+        # -- Silver (cleansing + curated) ------------------------
 
-  - task_key: silver_dim_articolo
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_articolo
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_articolo
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_articolo
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_corriere
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_corriere
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_corriere
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_corriere
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_fornitore
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_fornitore
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_fornitore
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_fornitore
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_operatore
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_operatore
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_operatore
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_operatore
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_pdv
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_pdv
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_pdv
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_pdv
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_sito
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_sito
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_sito
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_sito
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: silver_dim_topografia
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/silver/dimensioni/silver_dim_topografia
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: silver_dim_topografia
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_topografia
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
 
-  # -- Gold (dim/fact/aggregati) ------------------------
+        # -- Gold (dim/fact/aggregati) ------------------------
 
-  - task_key: gold_lu_from_cdtdw
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/condiviso/gold_lu_from_cdtdw
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-        landing_base_path: "{{job.parameters.landing_base_path}}"
-        file_format: "{{job.parameters.file_format}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_lu_from_cdtdw
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/condiviso/gold_lu_from_cdtdw
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_articolo
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_articolo
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_articolo
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_articolo
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_calendario
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_calendario
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_calendario
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_calendario
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_corriere
-    depends_on:
-      - task_key: silver_dim_corriere
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_corriere
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_corriere
+          depends_on:
+            - task_key: silver_dim_corriere
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_corriere
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_fornitore
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_fornitore
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_fornitore
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_fornitore
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_operatore
-    depends_on:
-      - task_key: silver_dim_operatore
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_operatore
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_operatore
+          depends_on:
+            - task_key: silver_dim_operatore
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_operatore
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_pdv
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_pdv
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_pdv
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_pdv
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_sito
-    depends_on:
-      - task_key: silver_dim_sito
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_sito
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_sito
+          depends_on:
+            - task_key: silver_dim_sito
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_sito
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_struttura_merceologica
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_struttura_merceologica
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_struttura_merceologica
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_struttura_merceologica
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200
 
-  - task_key: gold_dim_topografia
-    depends_on:
-      - task_key: silver_dim_topografia
-    environment_key: default
-    notebook_task:
-      notebook_path: ../notebooks/gold/dimensioni/gold_dim_topografia
-      base_parameters:
-        env: "{{job.parameters.env}}"
-        run_date: "{{job.parameters.run_date}}"
-    max_retries: 2
-    timeout_seconds: 7200
+        - task_key: gold_dim_topografia
+          depends_on:
+            - task_key: silver_dim_topografia
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_topografia
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+          max_retries: 2
+          timeout_seconds: 7200

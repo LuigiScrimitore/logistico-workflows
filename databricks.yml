@@ -1,29 +1,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Logistico 2.0 — Databricks Asset Bundle root
-# Versione: 3.0.0 — 2026-06-08
-#
-# Pattern adottato: i job sono definiti come file YAML separati in `workflows/*.yml`
-# e inclusi qui via `include`. Single source of truth per ogni workflow.
-# Le variabili globali e i target dev/stage/prod sono dichiarati di seguito.
+# Logistico 2.0 — Databricks Asset Bundle (consolidato, ACT_9018 / ADR-0021)
+# Modello di deploy: pipeline PER-AREA. I job sono in workflows/*.yml, ciascuno
+# in formato DAB `resources: jobs: <key>:`, inclusi qui via `include`.
+# Rilascio a fasi (ADR-0017): si abilita/deploya una pipeline per-area alla volta.
 # ─────────────────────────────────────────────────────────────────────────────
 
 bundle:
-  name: logistica_20
+  name: logistico
 
 include:
   - workflows/*.yml
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Variabili globali (override per target)
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ─────────────────────────────────────────────────────────────────────────────
-# BROWNFIELD (integrazione nel DWW esistente) — valori risolti per target dev/prod.
-# I default qui sotto riflettono le decisioni D2/D3 di 11_devops_handoff_databricks.md:
-#   - D3 landing = UC Volume in landing_<env>.logistica.files  -> /Volumes/...
-#   - D2 anagrafiche cdt_dw in schema proprio condiviso         -> <catalog_bronze>.condiviso
-# Se il team DWW conferma valori diversi (ADLS external / config catalog / riuso anagrafiche),
-# sovrascrivere QUI e/o nei blocchi targets.dev|prod. I workflow ereditano via ${var.*}.
+# Variabili globali (override per target). Default = decisioni D2/D3
+# (11_devops_handoff_databricks.md): landing = UC Volume; anagrafiche in <bronze>.condiviso.
 # ─────────────────────────────────────────────────────────────────────────────
 variables:
   env:
@@ -39,32 +29,20 @@ variables:
     description: "Email destinatario per alert failure"
     default: luigi.scrimitore@aperion.it
 
-# NB (ADR-0009): i job girano su compute SERVERLESS — nessun job cluster classico.
-# Le variabili `spark_version` / `node_type_id` sono state rimosse (2026-08-04, ACT_9007):
-# su serverless runtime e sizing sono gestiti da Databricks. Il wheel `logistica_utils`
-# e' dichiarato come dipendenza nell'`environments` di ciascun workflow.
+# NB (ADR-0009): job su compute SERVERLESS — nessun job cluster classico. Il wheel
+# `logistica_utils` è dichiarato in `environments` di ciascun workflow come dipendenza
+# PINNATA dal GitLab Package Registry (`logistica_utils==1.0.4`, DBR-05) — non più build
+# locale da lib/ (che nel multi-repo è un repo separato).
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Workspace defaults
 # ─────────────────────────────────────────────────────────────────────────────
-
 workspace:
   host: ${DATABRICKS_HOST}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Artefatto Python (wheel logistica_utils)
+# Target di deploy. `presets.tags` = cost tag applicati a tutte le risorse (KIT-05).
 # ─────────────────────────────────────────────────────────────────────────────
-
-artifacts:
-  logistica_wheel:
-    type: whl
-    path: lib/
-    build: "pip install build && python -m build --wheel"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Target di deploy
-# ─────────────────────────────────────────────────────────────────────────────
-
 targets:
 
   dev:
@@ -78,6 +56,12 @@ targets:
       email_alert: luigi.scrimitore@aperion.it
       landing_base_path: "/Volumes/landing_dev/logistica/files"
       retail_master_schema: "bronze_dev.condiviso"
+    presets:
+      tags:
+        business_unit: logistica
+        project: logistico
+        env: dev
+        managed_by: dab
 
   prod:
     mode: production
@@ -89,3 +73,9 @@ targets:
       email_alert: luigi.scrimitore@aperion.it
       landing_base_path: "/Volumes/landing_prod/logistica/files"
       retail_master_schema: "bronze_prod.condiviso"
+    presets:
+      tags:
+        business_unit: logistica
+        project: logistico
+        env: prod
+        managed_by: dab
