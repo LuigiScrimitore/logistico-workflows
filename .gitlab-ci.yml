@@ -1,15 +1,22 @@
 # logistico-workflows — validate/deploy del Databricks Asset Bundle.
-# Secret CI/CD (ADR-0005, masked per-repo): DATABRICKS_HOST, DATABRICKS_TOKEN.
+# Auth via Managed Identity (team 2026-08-27), come infrastructure: niente token.
+# Variabili CI (Protected; main è branch protetto): DATABRICKS_HOST (workspace DEV),
+# ARM_CLIENT_ID/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID (user-assigned MI del runner).
 stages: [validate, deploy]
 
 default:
   tags: [azure-runner]   # group runner del subgroup Logistico (vedi Runners del progetto)
   image: python:3.11
+  variables:
+    ARM_USE_MSI: "true"   # auth Azure/Databricks via MI del runner (come infrastructure)
+  before_script:
+    # Databricks CLI NUOVA (quella legacy `pip install databricks-cli` NON ha `bundle`).
+    - curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+    - databricks --version
 
 validate:
   stage: validate
   script:
-    - pip install databricks-cli   # TODO: pinnare la versione della Databricks CLI
     - databricks bundle validate
   # TODO: installare il wheel di logistico-lib dal Package Registry (DBR-05) e
   #       pinnare la versione in databricks.yml (libraries: - whl: ...).
