@@ -65,7 +65,7 @@ resources:
           description: "LAD resolver su F_CARICO"
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -78,7 +78,7 @@ resources:
           description: "LAD resolver su F_PREP_SPED"
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -91,7 +91,7 @@ resources:
           description: "LAD resolver su F_TURNO_PREP_SITO"
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -104,7 +104,7 @@ resources:
           description: "LAD resolver su F_TRASPORTO"
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -117,7 +117,7 @@ resources:
           description: "LAD resolver su F_ORDINI"
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver
+            notebook_path: ../notebooks/gold/maintenance/gold_lad_resolver.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -138,7 +138,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_a_inbound_mensile
+            notebook_path: ../notebooks/gold/aggregati/gold_a_inbound_mensile.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -154,7 +154,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_a_outbound_mensile
+            notebook_path: ../notebooks/gold/aggregati/gold_a_outbound_mensile.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -170,7 +170,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_a_produttivita_mensile
+            notebook_path: ../notebooks/gold/aggregati/gold_a_produttivita_mensile.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -188,7 +188,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_a_stock_mensile
+            notebook_path: ../notebooks/gold/aggregati/gold_a_stock_mensile.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -204,7 +204,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_dm_giacenze_monthly
+            notebook_path: ../notebooks/gold/aggregati/gold_dm_giacenze_monthly.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -220,7 +220,7 @@ resources:
             - task_key: lad_f_ordini
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/aggregati/gold_dm_turno_prep_sito
+            notebook_path: ../notebooks/gold/aggregati/gold_dm_turno_prep_sito.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -241,7 +241,7 @@ resources:
             - task_key: gold_dm_turno_prep_sito
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/dq/dq_gate
+            notebook_path: ../notebooks/dq/dq_gate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"

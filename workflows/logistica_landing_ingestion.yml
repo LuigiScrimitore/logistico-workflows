@@ -63,7 +63,7 @@ resources:
         - task_key: bronze_aree_merceologiche
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_aree_merceologiche
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_aree_merceologiche.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -76,7 +76,7 @@ resources:
         - task_key: bronze_carrellisti
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_carrellisti
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_carrellisti.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -89,7 +89,7 @@ resources:
         - task_key: bronze_classe_posto_pallet
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_classe_posto_pallet
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_classe_posto_pallet.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -102,7 +102,7 @@ resources:
         - task_key: bronze_corsie
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_corsie
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_corsie.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -115,7 +115,7 @@ resources:
         - task_key: bronze_preparatori
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_preparatori
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_preparatori.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -128,7 +128,7 @@ resources:
         - task_key: bronze_ricevitori
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_ricevitori
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_ricevitori.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -141,7 +141,7 @@ resources:
         - task_key: bronze_spedizionieri
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_spedizionieri
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_spedizionieri.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -154,7 +154,7 @@ resources:
         - task_key: bronze_struttura_mag
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_struttura_mag
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_struttura_mag.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -167,7 +167,7 @@ resources:
         - task_key: bronze_tabgen
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/anagrafiche/bronze_tabgen
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_tabgen.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -180,7 +180,7 @@ resources:
         - task_key: bronze_apvpunto_vendita
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_apvpunto_vendita
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_apvpunto_vendita.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -192,7 +192,7 @@ resources:
         - task_key: bronze_artdgene
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_artdgene
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_artdgene.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -204,7 +204,7 @@ resources:
         - task_key: bronze_buoni_eco
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/stat/bronze_buoni_eco
+            notebook_path: ../notebooks/bronze/stat/bronze_buoni_eco.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -216,7 +216,7 @@ resources:
         - task_key: bronze_tipo_attivita
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/stat/bronze_tipo_attivita
+            notebook_path: ../notebooks/bronze/stat/bronze_tipo_attivita.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"

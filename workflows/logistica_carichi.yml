@@ -65,7 +65,7 @@ resources:
         - task_key: bronze_carichi_dettagli
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carichi/bronze_carichi_dettagli
+            notebook_path: ../notebooks/bronze/carichi/bronze_carichi_dettagli.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -78,7 +78,7 @@ resources:
         - task_key: bronze_carichi_testate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carichi/bronze_carichi_testate
+            notebook_path: ../notebooks/bronze/carichi/bronze_carichi_testate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -91,7 +91,7 @@ resources:
         - task_key: bronze_pesate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carichi/bronze_pesate
+            notebook_path: ../notebooks/bronze/carichi/bronze_pesate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -104,7 +104,7 @@ resources:
         - task_key: bronze_traccia_ce178
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carichi/bronze_traccia_ce178
+            notebook_path: ../notebooks/bronze/carichi/bronze_traccia_ce178.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -122,7 +122,7 @@ resources:
             - task_key: bronze_carichi_dettagli
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/carichi/silver_carichi_dettagli
+            notebook_path: ../notebooks/silver/carichi/silver_carichi_dettagli.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -134,7 +134,7 @@ resources:
             - task_key: bronze_carichi_testate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/carichi/silver_carichi_testate
+            notebook_path: ../notebooks/silver/carichi/silver_carichi_testate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -146,7 +146,7 @@ resources:
             - task_key: bronze_pesate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/carichi/silver_pesate
+            notebook_path: ../notebooks/silver/carichi/silver_pesate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -160,7 +160,7 @@ resources:
             - task_key: silver_pesate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/carichi/silver_prep_carico
+            notebook_path: ../notebooks/silver/carichi/silver_prep_carico.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -172,7 +172,7 @@ resources:
             - task_key: bronze_traccia_ce178
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/carichi/silver_traccia_ce178
+            notebook_path: ../notebooks/silver/carichi/silver_traccia_ce178.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -184,7 +184,7 @@ resources:
             - task_key: bronze_traccia_ce178
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/tracciabilita/silver_tracciabilita_lotto
+            notebook_path: ../notebooks/silver/tracciabilita/silver_tracciabilita_lotto.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -199,7 +199,7 @@ resources:
             - task_key: silver_prep_carico
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/carichi/gold_f_carico
+            notebook_path: ../notebooks/gold/carichi/gold_f_carico.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -212,7 +212,7 @@ resources:
             - task_key: silver_prep_carico
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/carichi/gold_late_arriving_handler
+            notebook_path: ../notebooks/gold/carichi/gold_late_arriving_handler.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -225,7 +225,7 @@ resources:
             - task_key: silver_tracciabilita_lotto
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/tracciabilita/gold_f_tracciabilita_lotti
+            notebook_path: ../notebooks/gold/tracciabilita/gold_f_tracciabilita_lotti.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -243,7 +243,7 @@ resources:
             - task_key: gold_f_tracciabilita_lotti
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/dq/dq_gate
+            notebook_path: ../notebooks/dq/dq_gate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"

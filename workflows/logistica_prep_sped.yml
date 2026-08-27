@@ -66,7 +66,7 @@ resources:
         - task_key: bronze_cartellino
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carrellisti/bronze_cartellino
+            notebook_path: ../notebooks/bronze/carrellisti/bronze_cartellino.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -79,7 +79,7 @@ resources:
         - task_key: bronze_missioni_carr
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/carrellisti/bronze_missioni_carr
+            notebook_path: ../notebooks/bronze/carrellisti/bronze_missioni_carr.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -92,7 +92,7 @@ resources:
         - task_key: bronze_prep_bolle_righe
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_righe
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_righe.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -104,7 +104,7 @@ resources:
         - task_key: bronze_prep_bolle_testate
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_testate
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_bolle_testate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -116,7 +116,7 @@ resources:
         - task_key: bronze_prep_riepiloghi
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_riepiloghi
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_prep_riepiloghi.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -128,7 +128,7 @@ resources:
         - task_key: bronze_storico_liste
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_storico_liste
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_storico_liste.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -140,7 +140,7 @@ resources:
         - task_key: bronze_timbrature
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_timbrature
+            notebook_path: ../notebooks/bronze/prep_spedizioni/bronze_timbrature.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -155,7 +155,7 @@ resources:
         - task_key: silver_prep_prep_sped
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_prep_sped
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_prep_sped.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -167,7 +167,7 @@ resources:
             - task_key: bronze_prep_riepiloghi
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_riepiloghi
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_riepiloghi.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -179,7 +179,7 @@ resources:
             - task_key: silver_prep_riepiloghi
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_turno_prep_sito
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_prep_turno_prep_sito.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -191,7 +191,7 @@ resources:
             - task_key: bronze_prep_bolle_righe
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_clean
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_clean.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -203,7 +203,7 @@ resources:
             - task_key: silver_storico_bolle_clean
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_uniche
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_bolle_uniche.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -215,7 +215,7 @@ resources:
             - task_key: bronze_storico_liste
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_clean
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_clean.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -227,7 +227,7 @@ resources:
             - task_key: silver_storico_liste_clean
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_uniche
+            notebook_path: ../notebooks/silver/prep_spedizioni/silver_storico_liste_uniche.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -239,7 +239,7 @@ resources:
             - task_key: bronze_missioni_carr
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/tracciabilita/silver_missione_carrellista
+            notebook_path: ../notebooks/silver/tracciabilita/silver_missione_carrellista.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -251,7 +251,7 @@ resources:
             - task_key: bronze_cartellino
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/tracciabilita/silver_sessione_carrellista
+            notebook_path: ../notebooks/silver/tracciabilita/silver_sessione_carrellista.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -267,7 +267,7 @@ resources:
             - task_key: silver_sessione_carrellista
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/carrellisti/gold_f_movimentazione_carrellisti
+            notebook_path: ../notebooks/gold/carrellisti/gold_f_movimentazione_carrellisti.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -279,7 +279,7 @@ resources:
             - task_key: silver_prep_prep_sped
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_prep_sped
+            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_prep_sped.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -292,7 +292,7 @@ resources:
             - task_key: silver_prep_turno_prep_sito
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_turno_prep_sito
+            notebook_path: ../notebooks/gold/prep_spedizioni/gold_f_turno_prep_sito.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -311,7 +311,7 @@ resources:
             - task_key: gold_f_turno_prep_sito
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/dq/dq_gate
+            notebook_path: ../notebooks/dq/dq_gate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"

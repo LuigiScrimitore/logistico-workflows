@@ -4,7 +4,7 @@ Notebook, Databricks Asset Bundle, SQL e script runtime.
 
 > **Repo generato** dallo split del monorepo (ADR-0016) via
 > `scripts/split_to_multirepo.py`.
-> Proiezione da monorepo **@d2792c0**.
+> Proiezione da monorepo **@a903319**.
 >
 > **Durante la transizione il source of truth è il monorepo**: non modificare
 > questi file a mano finché non avviene il cutover. Al cutover il monorepo viene

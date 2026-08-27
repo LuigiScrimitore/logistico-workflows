@@ -58,7 +58,7 @@ resources:
         - task_key: bronze_catena
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/giacenze/bronze_catena
+            notebook_path: ../notebooks/bronze/giacenze/bronze_catena.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -71,7 +71,7 @@ resources:
         - task_key: bronze_catena_esterni
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/giacenze/bronze_catena_esterni
+            notebook_path: ../notebooks/bronze/giacenze/bronze_catena_esterni.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -84,7 +84,7 @@ resources:
         - task_key: bronze_giacenze_snapshot
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/giacenze/bronze_giacenze_snapshot
+            notebook_path: ../notebooks/bronze/giacenze/bronze_giacenze_snapshot.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -96,7 +96,7 @@ resources:
         - task_key: bronze_movimenti_magazzino
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/bronze/giacenze/bronze_movimenti_magazzino
+            notebook_path: ../notebooks/bronze/giacenze/bronze_movimenti_magazzino.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -114,7 +114,7 @@ resources:
             - task_key: silver_catena_unificata
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/cdt_estr/silver_t_stock
+            notebook_path: ../notebooks/silver/cdt_estr/silver_t_stock.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -126,7 +126,7 @@ resources:
             - task_key: bronze_catena
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/giacenze/silver_catena_clean
+            notebook_path: ../notebooks/silver/giacenze/silver_catena_clean.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -138,7 +138,7 @@ resources:
             - task_key: bronze_catena_esterni
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/giacenze/silver_catena_esterni_clean
+            notebook_path: ../notebooks/silver/giacenze/silver_catena_esterni_clean.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -151,7 +151,7 @@ resources:
             - task_key: silver_catena_esterni_clean
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/giacenze/silver_catena_unificata
+            notebook_path: ../notebooks/silver/giacenze/silver_catena_unificata.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -163,7 +163,7 @@ resources:
             - task_key: silver_prep_giacenze
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/giacenze/silver_giacenze_aggregata
+            notebook_path: ../notebooks/silver/giacenze/silver_giacenze_aggregata.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -176,7 +176,7 @@ resources:
             - task_key: silver_t_stock
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/giacenze/silver_prep_giacenze
+            notebook_path: ../notebooks/silver/giacenze/silver_prep_giacenze.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -191,7 +191,7 @@ resources:
             - task_key: silver_prep_giacenze
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/giacenze/gold_f_giacenze_daily
+            notebook_path: ../notebooks/gold/giacenze/gold_f_giacenze_daily.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -207,7 +207,7 @@ resources:
             - task_key: gold_f_giacenze_daily
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/dq/dq_gate
+            notebook_path: ../notebooks/dq/dq_gate.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
