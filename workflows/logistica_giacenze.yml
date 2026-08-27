@@ -33,6 +33,12 @@ resources:
         project: logistico_20
 
       parameters:
+        - name: landing_base_path
+          default: ${var.landing_base_path}
+        - name: file_format
+          default: "auto"
+        - name: siti
+          default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
         - name: env
           default: "dev"
         - name: run_date

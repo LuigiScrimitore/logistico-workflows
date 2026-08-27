@@ -36,6 +36,10 @@ resources:
         project: logistico_20
 
       parameters:
+        - name: landing_base_path
+          default: ${var.landing_base_path}
+        - name: file_format
+          default: "auto"
         - name: env
           default: "dev"
         - name: run_date

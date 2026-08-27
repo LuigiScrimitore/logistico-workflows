@@ -39,6 +39,8 @@ resources:
         project: logistico_20
 
       parameters:
+        - name: retail_master_schema
+          default: ${var.retail_master_schema}
         - name: env
           default: "dev"
         - name: run_date

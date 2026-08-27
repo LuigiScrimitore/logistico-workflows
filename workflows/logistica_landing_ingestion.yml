@@ -34,6 +34,8 @@ resources:
         project: logistico_20
 
       parameters:
+        - name: siti
+          default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
         - name: env
           default: "dev"
         - name: run_date
