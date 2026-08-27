@@ -49,7 +49,9 @@ targets:
     mode: development
     default: true
     workspace:
-      root_path: /Workspace/data-platform/etl/logistica/${bundle.target}
+      # mode:development esige un root_path univoco per utente (isolamento deploy):
+      # aggiunto ${workspace.current_user.userName}. In CI l'utente è la MI.
+      root_path: /Workspace/data-platform/etl/logistica/${bundle.target}/${workspace.current_user.userName}
     variables:
       env: dev
       email_alert: luigi.scrimitore@aperion.it
