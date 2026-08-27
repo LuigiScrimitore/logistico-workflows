@@ -4,11 +4,12 @@
 # ARM_CLIENT_ID/ARM_TENANT_ID/ARM_SUBSCRIPTION_ID (user-assigned MI del runner).
 stages: [validate, deploy]
 
+variables:
+  ARM_USE_MSI: "true"   # auth Azure/Databricks via MI del runner (come infrastructure)
+
 default:
   tags: [azure-runner]   # group runner del subgroup Logistico (vedi Runners del progetto)
   image: python:3.11
-  variables:
-    ARM_USE_MSI: "true"   # auth Azure/Databricks via MI del runner (come infrastructure)
   before_script:
     # Databricks CLI NUOVA (quella legacy `pip install databricks-cli` NON ha `bundle`).
     - curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
