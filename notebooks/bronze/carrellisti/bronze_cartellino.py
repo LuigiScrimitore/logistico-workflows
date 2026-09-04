@@ -12,8 +12,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from utils import get_catalog, add_row_hash, detect_format, read_landing
@@ -82,9 +86,11 @@ def landing_paths():
 def read_one(path):
     fmt = detect_format(path, file_format, dbutils)
     if fmt == "parquet":
-        return spark.read.format("parquet").load(path)
-    return (spark.read.option("header", "true").option("inferSchema", "false")
-            .option("sep", ";").option("encoding", "UTF-8").csv(f"{path}*.csv"))
+        df = spark.read.format("parquet").load(path)
+    else:
+        df = (spark.read.option("header", "true").option("inferSchema", "false")
+              .option("sep", ";").option("encoding", "UTF-8").csv(f"{path}*.csv"))
+    return df.withColumn("_source_file", F.col("_metadata.file_path"))
 
 # COMMAND ----------
 # MAGIC %md #### 4. Lettura (unitaria, dato grezzo)
@@ -96,17 +102,20 @@ logger.info(f"START {NOTEBOOK_NAME} | env={env} | run_date={run_date} | MODE={MO
 frames = []
 for p in landing_paths():
     try:
-        frames.append(read_one(p))
+        df = read_one(p)
+        df.columns  # LL-021: risoluzione EAGER del path (la lettura e' lazy: senza questo
+                    # l'eccezione scatta a valle, fuori dal try, e fa fallire il job)
+        frames.append(df)
         logger.info(f"Letto: {p}")
-    except AnalysisException:
-        logger.warning(f"File non trovato: {p} - skip")
+    except Exception as _e:
+        logger.warning(f"Path non trovato/illeggibile: {p} - skip ({type(_e).__name__})")
 
 if not frames:
     logger.info("Nessun file in landing per la run_date. Notebook terminato.")
     dbutils.notebook.exit("NO_DATA")
 
 raw_df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), frames)
-raw_df = raw_df.select([c for c in SOURCE_COLS if c in raw_df.columns])
+raw_df = raw_df.select([c for c in SOURCE_COLS if c in raw_df.columns] + [c for c in ["_source_file"] if c in raw_df.columns])
 
 # COMMAND ----------
 # MAGIC %md #### 5. Metadati Bronze
@@ -117,11 +126,10 @@ bronze_df = (
     raw_df
     .withColumn("_bronze_load_date", F.lit(run_date).cast("date"))
     .withColumn("_bronze_insert_ts", F.current_timestamp())
-    .withColumn("_source_file", F.input_file_name())
 )
 if IS_MULTISITE:
     bronze_df = bronze_df.withColumn(
-        "_sito_cod", F.regexp_extract(F.input_file_name(), r"/logistix-landing/([^/]+)/", 1)
+        "_sito_cod", F.regexp_extract(F.col("_source_file"), r"/logistix-landing/([^/]+)/", 1)
     )
 
 rows_read = bronze_df.count()

@@ -21,8 +21,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_row_count
@@ -68,11 +72,13 @@ try:
     def to_ts(date_col, ora_col):
         ora_str = F.col(ora_col).cast("string")
         ora_padded = F.lpad(F.regexp_replace(ora_str, "[^0-9]", ""), 4, "0")
+        # try_to_timestamp: input malformato (es. ora '603') -> NULL invece di crash ANSI
+        # (CANNOT_PARSE_TIMESTAMP), cosi' il coalesce puo' passare al formato paddato. ACT_9027.
         return F.coalesce(
-            F.to_timestamp(F.concat_ws(" ", F.col(date_col).cast("string"), ora_str),
-                           "yyyy-MM-dd HH:mm:ss"),
-            F.to_timestamp(F.concat_ws(" ", F.col(date_col).cast("string"), ora_padded),
-                           "yyyy-MM-dd HHmm"),
+            F.try_to_timestamp(F.concat_ws(" ", F.col(date_col).cast("string"), ora_str),
+                               F.lit("yyyy-MM-dd HH:mm:ss")),
+            F.try_to_timestamp(F.concat_ws(" ", F.col(date_col).cast("string"), ora_padded),
+                               F.lit("yyyy-MM-dd HHmm")),
         )
 
     enriched = (src

@@ -6,7 +6,7 @@
 # entrypoint orchestrabile: la DQ girava dentro i singoli notebook, non come step del DAG.
 # Questo notebook e' il task DQ *standalone* eseguito in coda ai workflow di dominio: applica
 # i criteri dichiarativi di ACCEPTANCE_REGISTRY, persiste gli esiti in
-# `config_<env>.logistica_etl.dq_results` (D1) e applica il **gate**.
+# `config_<env>.etl.dq_results` (D1) e applica il **gate**.
 #
 # COSA FA
 #   1. seleziona le pipeline da verificare (per nome o per wave)
@@ -30,8 +30,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from datetime import date
 
@@ -125,7 +129,7 @@ logger.info(f"END {NOTEBOOK_NAME} | pipeline={len(report)} | failed={failed_tota
 if gate_on and blocking_total > 0:
     raise DQBlockingError(
         f"DQ gate: {blocking_total} check BLOCKING falliti su {len(report)} pipeline "
-        f"(env={env}, run_date={run_date}). Dettaglio in config_{env}.logistica_etl.dq_results."
+        f"(env={env}, run_date={run_date}). Dettaglio in config_{env}.etl.dq_results."
     )
 
 dbutils.notebook.exit(f"OK failed={failed_total} blocking={blocking_total}")

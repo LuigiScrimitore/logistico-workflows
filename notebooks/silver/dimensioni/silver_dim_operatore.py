@@ -17,8 +17,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
@@ -120,10 +124,7 @@ try:
 
     check_not_null(union_df, ["OPERATORE_COD", "SITO_COD", "TIPO_OPERATORE"], NOTEBOOK_NAME)
 
-    # COMMAND ----------
-    # MAGIC %md #### 4. Dedup su chiave composita (ultima versione per _bronze_insert_ts)
 
-    # COMMAND ----------
 
     w = Window.partitionBy(*DEDUP_KEYS).orderBy(F.col("_bronze_insert_ts").desc())
 
@@ -139,10 +140,7 @@ try:
         )
     )
 
-    # COMMAND ----------
-    # MAGIC %md #### 4-bis. Self-healing operatori mancanti (pattern legacy SP_AGG_ANAG_PREP_SPED3A/4A)
 
-    # COMMAND ----------
 
     # OP-28: gli operatori visti nell'attivita' ma NON presenti nelle 4 anagrafiche master
     # finivano orfani (sentinella -1) nei fatti (F_PREP_SPED, F_TURNO_PREP_SITO, F_CARICO).
@@ -210,10 +208,7 @@ try:
     logger.info(f"Righe dopo dedup + self-healing + membro ND: {rows_clean}")
     check_row_count(silver_df, min_rows=1, notebook_name=NOTEBOOK_NAME)
 
-    # COMMAND ----------
-    # MAGIC %md #### 5. Scrittura — overwrite completo (anagrafiche FULL, stato corrente)
 
-    # COMMAND ----------
 
     (silver_df.write.format("delta").mode("overwrite")
      .option("overwriteSchema", "true").saveAsTable(TARGET_TABLE))

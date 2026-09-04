@@ -56,8 +56,8 @@ resources:
         - environment_key: default
           spec:
             environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-            dependencies:
-              - logistica_utils==1.0.4
+            # [TEMP LOCALE] wheel via %pip nei notebook (DBR-05/ADR-0025)
+            dependencies: []
 
       tasks:
 

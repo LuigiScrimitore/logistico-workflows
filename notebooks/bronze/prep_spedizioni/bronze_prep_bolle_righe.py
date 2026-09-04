@@ -16,8 +16,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from utils import get_catalog, add_row_hash, detect_format, read_landing
@@ -190,7 +194,6 @@ bronze_df = (
     raw_df
     .withColumn("_bronze_load_date", F.lit(run_date).cast("date"))
     .withColumn("_bronze_insert_ts", F.current_timestamp())
-    .withColumn("_source_file", F.input_file_name())
 )
 
 # COMMAND ----------

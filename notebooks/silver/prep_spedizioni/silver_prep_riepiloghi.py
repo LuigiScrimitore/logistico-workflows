@@ -15,8 +15,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
@@ -67,6 +71,11 @@ try:
 
     _amap = get_sito_alias_map(spark, f"{BRONZE_CATALOG}.{SCHEMA}")
 
+    # STAT bronze e' tutto StringType e puo' contenere junk non-numerico (es. 'S') nei campi
+    # numerici: try_cast -> NULL sul malformato invece di far fallire il job (CAST_INVALID_INPUT).
+    def _int(name):  return F.expr(f"try_cast(`{name}` as int)")
+    def _dec(name):  return F.expr(f"try_cast(`{name}` as decimal(14,3))")
+
     silver_df = (
         raw_df
         .withColumn("_rn", F.row_number().over(w))
@@ -90,31 +99,31 @@ try:
             F.col("RPLPR_ORA_INIZ_PREP").cast("string").alias("ORA_INIZIO_PREP"),
             julian_to_date(F.col("RPLPR_DATA_FINE_PREP")).alias("DATA_FINE_PREP"),
             F.col("RPLPR_ORA_FINE_PREP").cast("string").alias("ORA_FINE_PREP"),
-            F.col("RPLPR_NRO_REFERENZE").cast("int").alias("NUM_REFERENZE"),
-            F.col("RPLPR_TOT_CARTONI").cast("decimal(14,3)").alias("TOT_CARTONI"),
-            F.col("RPLPR_TOT_QUINTALI").cast("decimal(14,3)").alias("TOT_QUINTALI"),
-            F.col("RPLPR_NRO_PREPARATI").cast("int").alias("NUM_PREPARATI"),
-            F.col("RPLPR_TOT_CART_PREP").cast("decimal(14,3)").alias("TOT_CARTONI_PREP"),
-            F.col("RPLPR_TOT_QUIN_PREP").cast("decimal(14,3)").alias("TOT_QUINTALI_PREP"),
-            F.col("RPLPR_GABBIE_PREPARA").cast("int").alias("GABBIE_PREPARATE"),
-            F.col("RPLPR_QTA_DA_EV_UDM").cast("decimal(14,3)").alias("QTA_DA_EVADERE_UDM"),
+            _int("RPLPR_NRO_REFERENZE").alias("NUM_REFERENZE"),
+            _dec("RPLPR_TOT_CARTONI").alias("TOT_CARTONI"),
+            _dec("RPLPR_TOT_QUINTALI").alias("TOT_QUINTALI"),
+            _int("RPLPR_NRO_PREPARATI").alias("NUM_PREPARATI"),
+            _dec("RPLPR_TOT_CART_PREP").alias("TOT_CARTONI_PREP"),
+            _dec("RPLPR_TOT_QUIN_PREP").alias("TOT_QUINTALI_PREP"),
+            _int("RPLPR_GABBIE_PREPARA").alias("GABBIE_PREPARATE"),
+            _dec("RPLPR_QTA_DA_EV_UDM").alias("QTA_DA_EVADERE_UDM"),
             F.col("RPLPR_FLAG_BOLLE").cast("string").alias("FLAG_BOLLE"),
-            F.col("RPLPR_NRO_INEVASI").cast("int").alias("NUM_INEVASI"),
-            F.col("RPLPR_TOT_CART_INEV").cast("decimal(14,3)").alias("TOT_CARTONI_INEVASI"),
-            F.col("RPLPR_TOT_QUIN_INEV").cast("decimal(14,3)").alias("TOT_QUINTALI_INEVASI"),
-            F.col("RPLPR_GABBIE_TRATT").cast("int").alias("GABBIE_TRATTATE"),
+            _int("RPLPR_NRO_INEVASI").alias("NUM_INEVASI"),
+            _dec("RPLPR_TOT_CART_INEV").alias("TOT_CARTONI_INEVASI"),
+            _dec("RPLPR_TOT_QUIN_INEV").alias("TOT_QUINTALI_INEVASI"),
+            _int("RPLPR_GABBIE_TRATT").alias("GABBIE_TRATTATE"),
             F.col("RPLPR_NRO_GABBIA_MIN").cast("string").alias("NUM_GABBIA_MIN"),
             F.col("RPLPR_FLAG_INIZIATO").cast("string").alias("FLAG_INIZIATO"),
             F.col("RPLPR_FLAG_FINITO").cast("string").alias("FLAG_FINITO"),
             F.col("RPLPR_NRO_COMMISSIONE").cast("string").alias("COMMISSIONE_NRO"),
             F.col("RPLPR_NOME_UTENTE").cast("string").alias("NOME_UTENTE"),
             julian_to_date(F.col("RPLPR_DATA_MODIFICA")).alias("DATA_MODIFICA"),
-            F.col("RPLPR_PL_INT_GENERATI").cast("int").alias("PALLET_INT_GENERATI"),
+            _int("RPLPR_PL_INT_GENERATI").alias("PALLET_INT_GENERATI"),
             F.col("RPLPR_PORTA_USCITA").cast("string").alias("PORTA_USCITA"),
             F.col("RPLPR_COD_ZONA_MAG").cast("string").alias("ZONA_MAG_COD"),
             F.col("RPLPR_GITA").cast("string").alias("GITA"),
             F.col("RPLPR_COD_AREA_MERCEOLOGICA").cast("string").alias("AREA_MERCEOLOGICA_COD"),
-            F.col("RPLPR_VOLUME").cast("decimal(14,3)").alias("VOLUME"),
+            _dec("RPLPR_VOLUME").alias("VOLUME"),
             F.col("RPLPR_NOME_TERMINALE").cast("string").alias("NOME_TERMINALE"),
             F.col("RPLPR_CARRELLO").cast("string").alias("CARRELLO"),
             julian_to_date(F.col("RPLPR_DATA_INSERIMENTO")).alias("DATA_INSERIMENTO"),

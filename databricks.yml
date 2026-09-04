@@ -49,9 +49,10 @@ targets:
     mode: development
     default: true
     workspace:
-      # mode:development esige un root_path univoco per utente (isolamento deploy):
-      # aggiunto ${workspace.current_user.userName}. In CI l'utente è la MI.
-      root_path: /Workspace/data-platform/etl/logistica/${bundle.target}/${workspace.current_user.userName}
+      # mode:development: ogni sandbox deploya nella HOME dell'utente (default DAB),
+      # dove i permessi ci sono gia'. La cartella condivisa /Workspace/data-platform/etl/logistica
+      # resta riservata a CI/Managed Identity (evita 403 sulle sandbox personali).
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       env: dev
       email_alert: luigi.scrimitore@aperion.it

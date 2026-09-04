@@ -54,8 +54,8 @@ resources:
         - environment_key: default
           spec:
             environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-            dependencies:
-              - logistica_utils==1.0.4
+            # [TEMP LOCALE] wheel via %pip nei notebook (DBR-05/ADR-0025)
+            dependencies: []
 
       tasks:
 
@@ -84,18 +84,6 @@ resources:
               landing_base_path: "{{job.parameters.landing_base_path}}"
               file_format: "{{job.parameters.file_format}}"
               siti: "{{job.parameters.siti}}"
-          max_retries: 2
-          timeout_seconds: 7200
-
-        - task_key: bronze_giacenze_snapshot
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/bronze/giacenze/bronze_giacenze_snapshot.py
-            base_parameters:
-              env: "{{job.parameters.env}}"
-              run_date: "{{job.parameters.run_date}}"
-              landing_base_path: "{{job.parameters.landing_base_path}}"
-              file_format: "{{job.parameters.file_format}}"
           max_retries: 2
           timeout_seconds: 7200
 
@@ -178,7 +166,6 @@ resources:
 
         - task_key: silver_prep_giacenze
           depends_on:
-            - task_key: bronze_giacenze_snapshot
             - task_key: silver_t_stock
           environment_key: default
           notebook_task:

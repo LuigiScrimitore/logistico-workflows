@@ -55,8 +55,10 @@ resources:
         - environment_key: default
           spec:
             environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-            dependencies:
-              - logistica_utils==1.0.4
+            # [TEMP LOCALE — smoke test] nessuna dependency a livello ambiente: il wheel viene
+            # installato via `%pip install` in prima cella dei notebook (il build dell'environment
+            # serverless non accede al Volume UC). DBR-05 da formalizzare.
+            dependencies: []
 
       tasks:
 

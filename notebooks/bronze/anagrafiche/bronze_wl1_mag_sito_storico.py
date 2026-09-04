@@ -1,20 +1,25 @@
 # Databricks notebook source
-# Area: Giacenze / CND
+# Area: Anagrafiche (migrazione TO-BE — lettura da sorgenti RAW)
 # Layer: Bronze
-# Versione: 3.0.0
-# Autore: Luigi Scrimitore
-# Data: 2026-06-08
-# Descrizione: Ingestion giornaliera T_STOCK da ADLS Gen2 landing zone (CSV/Parquet).
-#              MODE = SNAPSHOT: snapshot giornaliero storicizzato (replaceWhere su
-#              _bronze_load_date, partizionato per data). Nessun MERGE.
-#              Tutti i campi sorgente trattati come StringType (schema-on-read).
-#              Riferimento: DOCS/Landing & Bronze - Revision Spec.md
-#              Path convention pending OP-07 (struttura Foconi da confermare con Reply).
+# Versione: 1.0.0
+# Data: 2026-09-03
+# Descrizione: Ingestion 1:1 della sorgente RAW WL1_MAG_SITO_STORICO (schema CDT_ESTR, locale).
+#              Storico mapping magazzino: MAG_SITO_COD_ORIG (codice numerico usato nelle
+#              spedizioni, es. 20) <-> MAG_SITO_COD (canonico alfa, es. 0020A), con validita'
+#              temporale (DATINI/DATFIN_VALID) e flag MAG_SITO_ORIG_ATTIVO.
+#              Fornisce a silver_dim_sito il codice numerico per ogni sito S_LOGISTIX (ACT_9026):
+#              filtro correnti+attivi = DATFIN_VALID=99999999 AND MAG_SITO_ORIG_ATTIVO=1.
+#              Sorgente landing: cdt-estr-raw-landing/wl1_mag_sito_storico (config 'cdt_estr_raw').
+#              MODE = FULL_OVERWRITE (anagrafica). Schema-on-read (StringType). SELECT * 1:1.
+
+# COMMAND ----------
+
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
 
 # COMMAND ----------
 
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from utils import get_catalog, detect_format, read_landing
@@ -43,20 +48,13 @@ file_format       = dbutils.widgets.get("file_format").strip().lower()
 
 # COMMAND ----------
 
-NOTEBOOK_NAME  = "bronze_giacenze_snapshot"
-SOURCE_SYSTEM  = "cnd"
-TABLE_NAME     = "t_stock"
-MODE           = "SNAPSHOT"
+NOTEBOOK_NAME   = "bronze_wl1_mag_sito_storico"
+SOURCE_SYSTEM   = "cdt_estr"
+LANDING_SUBDIR  = "cdt-estr-raw-landing"
+TABLE_NAME      = "wl1_mag_sito_storico"
+MODE            = "FULL_OVERWRITE"
 
-# SNAPSHOT non usa MERGE_KEYS (replaceWhere sulla data)
-
-# Schema sorgente esplicito (colonne reali verificate — NON modificare/inventare)
-SOURCE_COLS = [
-    "STKNMAG", "STKCINT", "ART_RADICE_COD", "ART_VAR_LOGIS_COD", "STKEAN",
-    "STKQTAPZ", "STKQTAUF", "STKPMP", "STKULTSTOCK", "STKDATAMINSCAD",
-    "STKQTAINSCAD", "STKDCRE", "STKDMAJ", "STKUTIL", "STKULTPRZCOM",
-    "STKULTPRZFAT", "STKQTAPZPREPCLIE", "STKQTAPZORDCLIE", "STKULTPRZNET"
-]
+SOURCE_COLS = []  # estrae tutto 1:1
 
 TARGET_CATALOG = get_catalog("bronze", env)
 TARGET_SCHEMA  = "logistica"
@@ -66,19 +64,21 @@ logger = get_logger(NOTEBOOK_NAME)
 year, month, day = run_date.split("-")
 
 # COMMAND ----------
-# MAGIC %md #### 3. Costruzione path landing (<source>-landing)
+# MAGIC %md #### 3. Costruzione path landing
 
 # COMMAND ----------
 
 def landing_path():
-    return f"{landing_base_path}/{SOURCE_SYSTEM}-landing/{TABLE_NAME}/{year}/{month}/{day}/"
+    return f"{landing_base_path}/{LANDING_SUBDIR}/{TABLE_NAME}/{year}/{month}/{day}/"
 
 def read_one(path):
     fmt = detect_format(path, file_format, dbutils)
     if fmt == "parquet":
-        return spark.read.format("parquet").load(path)
-    return (spark.read.option("header", "true").option("inferSchema", "false")
-            .option("sep", ";").option("encoding", "UTF-8").csv(f"{path}*.csv"))
+        df = spark.read.format("parquet").load(path)
+    else:
+        df = (spark.read.option("header", "true").option("inferSchema", "false")
+              .option("sep", ";").option("encoding", "UTF-8").csv(f"{path}*.csv"))
+    return df.withColumn("_source_file", F.col("_metadata.file_path"))
 
 # COMMAND ----------
 # MAGIC %md #### 4. Lettura (unitaria, dato grezzo)
@@ -96,7 +96,7 @@ except AnalysisException:
     dbutils.notebook.exit("NO_DATA")
 
 if SOURCE_COLS:
-    raw_df = raw_df.select([c for c in SOURCE_COLS if c in raw_df.columns])
+    raw_df = raw_df.select([c for c in SOURCE_COLS if c in raw_df.columns] + [c for c in ["_source_file"] if c in raw_df.columns])
 
 # COMMAND ----------
 # MAGIC %md #### 5. Metadati Bronze
@@ -107,7 +107,7 @@ bronze_df = (
     raw_df
     .withColumn("_bronze_load_date", F.lit(run_date).cast("date"))
     .withColumn("_bronze_insert_ts", F.current_timestamp())
-    .withColumn("_source_file", F.input_file_name())
+    .withColumn("_sito_estrazione", F.lit(SOURCE_SYSTEM))  # db-link locale: metadato tecnico
 )
 
 rows_read = bronze_df.count()
@@ -117,14 +117,12 @@ if rows_read == 0:
     dbutils.notebook.exit("NO_DATA")
 
 # COMMAND ----------
-# MAGIC %md #### 6. Scrittura SNAPSHOT (replaceWhere su _bronze_load_date)
+# MAGIC %md #### 6. Scrittura FULL_OVERWRITE (stato corrente)
 
 # COMMAND ----------
 
 (bronze_df.write.format("delta").mode("overwrite")
- .option("replaceWhere", f"_bronze_load_date = '{run_date}'")
- .partitionBy("_bronze_load_date").option("overwriteSchema", "true")
- .saveAsTable(FULL_TARGET))
-logger.info(f"SNAPSHOT replaceWhere _bronze_load_date={run_date} ({rows_read} righe)")
+ .option("overwriteSchema", "true").saveAsTable(FULL_TARGET))
+logger.info(f"FULL OVERWRITE {FULL_TARGET} ({rows_read} righe)")
 
 logger.info(f"END {NOTEBOOK_NAME} | righe_processate={rows_read}")

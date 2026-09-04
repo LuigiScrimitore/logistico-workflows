@@ -30,8 +30,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
@@ -136,9 +140,12 @@ try:
     # Ricostruire il timestamp di INIZIO da LSPRL_DATA_PRELIEVO (Julian) + LSPRL_ORA_PRELIEVO (HHMM),
     # fedele alla formula CDT_ESTR_VISTE.sql: TO_DATE((yyyymmdd||LPAD(ora,4,'0')),'YYYYMMDDHH24MI').
     # FINE non disponibile dalle liste; futura integrazione con riepiloghi (RPLPR_*).
-    _di_date = julian_to_date(F.col("sl.LSPRL_DATA_PRELIEVO").cast("long"))
+    # julian_to_date gestisce internamente il cast in sicurezza (JDN o data std, garbage->NULL):
+    # il pre-cast .cast("long") su valori sporchi (es. '2.0'/'1.23') crashava ANSI. ACT_9027.
+    _di_date = julian_to_date(F.col("sl.LSPRL_DATA_PRELIEVO"))
     _di_ora  = F.lpad(F.coalesce(F.col("sl.LSPRL_ORA_PRELIEVO"), F.lit("0")), 4, "0")
-    di  = F.to_timestamp(F.concat(F.date_format(_di_date, "yyyyMMdd"), _di_ora), "yyyyMMddHHmm")
+    # try_to_timestamp: ora malformata -> NULL invece di crash ANSI (CANNOT_PARSE_TIMESTAMP).
+    di  = F.try_to_timestamp(F.concat(F.date_format(_di_date, "yyyyMMdd"), _di_ora), F.lit("yyyyMMddHHmm"))
     df_ = F.lit(None).cast("timestamp")   # LSPRL_DATA_FINE_PRELIEVO assente
 
     # ── FASE 2 — SEC_PREP_PREL (S8): NULL se timestamp fine mancante.
@@ -160,9 +167,11 @@ try:
         # ── quantita' / valori ──
         F.col("sl.LSPRL_QTA_DA_EVADERE").alias("QTA_DAPREP"),
         F.col("sl.LSPRL_QTA_EVASA").alias("QTA_PREP"),
-        (F.coalesce(F.col("sb.BOL_PRZ_ACQ_NETTO"), F.lit(0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA"), F.lit(0))).alias("VAL_PREP_CST"),
-        (F.coalesce(F.col("sb.BOL_PRZ_CESSIONE"), F.lit(0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA"), F.lit(0))).alias("VAL_PREP_CES"),
-        (F.coalesce(F.col("sb.BOL_PRZ_VENDITA"),  F.lit(0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA"), F.lit(0))).alias("VAL_PREP_VEN"),
+        # prezzi BOL_PRZ_* sono stringhe (es. '1.4'): try_cast a double per l'aritmetica ANSI-safe
+        # (coalesce con lit(0) intero forzava coercizione a intero -> crash su prezzo decimale). ACT_9027.
+        (F.coalesce(F.expr("try_cast(sb.BOL_PRZ_ACQ_NETTO as double)"), F.lit(0.0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA").cast("double"), F.lit(0.0))).alias("VAL_PREP_CST"),
+        (F.coalesce(F.expr("try_cast(sb.BOL_PRZ_CESSIONE as double)"), F.lit(0.0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA").cast("double"), F.lit(0.0))).alias("VAL_PREP_CES"),
+        (F.coalesce(F.expr("try_cast(sb.BOL_PRZ_VENDITA as double)"),  F.lit(0.0)) * F.coalesce(F.col("sl.LSPRL_QTA_EVASA").cast("double"), F.lit(0.0))).alias("VAL_PREP_VEN"),
         # ── date/ore prelievo ──
         # Triple tempo: teniamo GIORNO_*_ID + DATA_* (timestamp), droppiamo ORA_* (regola pruning).
         clean_dat_d(di.cast("date")).alias("GIORNO_PREL_INIZ_ID"),
@@ -173,12 +182,14 @@ try:
         sec_prep_prel.alias("SEC_PREP_PREL"),
         # ── S10: PRESUNTO (da bolle_uniche). Il vettore/autista/automezzo REALE (SPED) è
         #    costante/null in CDT_DW sul 2026 (dismesso) -> escluso dal fatto (regola pruning).
-        F.coalesce(F.col("sb.BOL_COD_VETTORE"),   F.lit(0)).alias("VETTORE_PRESU_SPED_COD"),
-        F.coalesce(F.col("sb.BOL_COD_AUTISTA"),   F.lit(0)).alias("AUTISTA_PRESU_SPED_COD"),
-        F.coalesce(F.col("sb.BOL_COD_AUTOMEZZO"), F.lit(0)).alias("AUTOM_PRESU_SPED_COD"),
-        F.coalesce(F.col("sb.BOL_NRO_BOLLA"), F.lit(0)).alias("NUM_BOLLA_SPED"),
+        # try_cast as bigint: coalesce(stringa, lit(0)) sotto ANSI forza coercizione stringa->bigint;
+        # un codice sporco (es. '1.4') crasha (CAST_INVALID_INPUT). try_cast -> NULL -> 0. ACT_9027.
+        F.coalesce(F.expr("try_cast(sb.BOL_COD_VETTORE as bigint)"),   F.lit(0)).alias("VETTORE_PRESU_SPED_COD"),
+        F.coalesce(F.expr("try_cast(sb.BOL_COD_AUTISTA as bigint)"),   F.lit(0)).alias("AUTISTA_PRESU_SPED_COD"),
+        F.coalesce(F.expr("try_cast(sb.BOL_COD_AUTOMEZZO as bigint)"), F.lit(0)).alias("AUTOM_PRESU_SPED_COD"),
+        F.coalesce(F.expr("try_cast(sb.BOL_NRO_BOLLA as bigint)"), F.lit(0)).alias("NUM_BOLLA_SPED"),
         F.coalesce(F.col("sb.BOL_DATA_BOLLA"), F.lit(None).cast("date")).alias("DATA_BOLLA_SPED"),
-        F.coalesce(F.col("sb.BOL_SPEDIZIONIERE"), F.lit(0)).alias("OPER_SPED_COD"),
+        F.coalesce(F.expr("try_cast(sb.BOL_SPEDIZIONIERE as bigint)"), F.lit(0)).alias("OPER_SPED_COD"),
         # ── anagrafici/posizionali ──
         F.col("sl.LSPRL_COD_PREPARATOR").alias("OPER_PREP_COD"),
         F.col("sl.LSPRL_CORSIA").alias("MAPPA_CORSIA"),

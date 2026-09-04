@@ -21,8 +21,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
@@ -79,9 +83,10 @@ try:
         .withColumn("SITO_COD",        normalize_sito(F.col("MAG_SITO_COD"), _amap))
         .withColumn("CARRELLISTA_COD", F.col("CARTE_COD_CARRELLIST").cast("string"))
         .withColumn("DATA_PRESENZA",   julian_to_date(F.col("CARTE_DATA")))
-        # CARTE_LOGIN/CARTE_LOGOUT = entrata/uscita reali (timestamp)
-        .withColumn("ORA_LOGIN",       F.col("CARTE_LOGIN").cast("timestamp"))
-        .withColumn("ORA_LOGOUT",      F.col("CARTE_LOGOUT").cast("timestamp"))
+        # CARTE_LOGIN/CARTE_LOGOUT = entrata/uscita reali (timestamp). try_cast: valori sentinella
+        # sporchi (es. '0') -> NULL invece di crash ANSI (CAST_INVALID_INPUT). ACT_9027.
+        .withColumn("ORA_LOGIN",       F.expr("try_cast(CARTE_LOGIN as timestamp)"))
+        .withColumn("ORA_LOGOUT",      F.expr("try_cast(CARTE_LOGOUT as timestamp)"))
         # CARTE_ATTUALE: 'S' = sessione attualmente aperta
         .withColumn("FLG_SESSIONE_APERTA", (F.col("CARTE_ATTUALE") == F.lit("S")))
     )
@@ -93,8 +98,9 @@ try:
             "ORE_PRESENZA",
             F.when(
                 F.col("ORA_LOGOUT").isNotNull() & F.col("ORA_LOGIN").isNotNull(),
-                ((F.unix_timestamp(F.col("ORA_LOGOUT")) - F.unix_timestamp(F.col("ORA_LOGIN"))) / 3600.0)
-                .cast("decimal(6,2)")
+                # try_cast via expr (F.try_cast non esiste in questa versione): durate anomale
+                # fuori range Decimal(6,2) -> NULL invece di crash ANSI (NUMERIC_VALUE_OUT_OF_RANGE). ACT_9027.
+                F.expr("try_cast((unix_timestamp(ORA_LOGOUT) - unix_timestamp(ORA_LOGIN)) / 3600.0 as decimal(6,2))")
             ).otherwise(F.lit(None).cast("decimal(6,2)"))
         )
         .select(

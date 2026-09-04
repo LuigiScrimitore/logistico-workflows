@@ -16,12 +16,16 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
-from utils import get_catalog, normalize_sito, get_sito_alias_map
+from utils import get_catalog, normalize_sito, get_sito_alias_map, julian_to_date
 
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -32,9 +36,11 @@ from datetime import date
 
 dbutils.widgets.dropdown("env", "dev", ["dev", "prod"], "Environment")
 dbutils.widgets.text("run_date", str(date.today()), "Run Date (YYYY-MM-DD)")
+dbutils.widgets.dropdown("full_refresh", "false", ["false", "true"], "Full refresh")
 
-env      = dbutils.widgets.get("env")
-run_date = dbutils.widgets.get("run_date")
+env          = dbutils.widgets.get("env")
+run_date     = dbutils.widgets.get("run_date")
+full_refresh = dbutils.widgets.get("full_refresh") == "true"
 
 # COMMAND ----------
 
@@ -53,13 +59,12 @@ try:
     _amap = get_sito_alias_map(spark, f"{BRONZE_CATALOG}.{SCHEMA}")
     logger.info(f"START {NOTEBOOK_NAME} | env={env} | run_date={run_date}")
 
-    # ── Leggi solo il delta del giorno dalla Bronze ───────────────────────────
-    raw_df = (
-        spark.table(SOURCE_TABLE)
-        .filter(F.col("_bronze_load_date") == F.lit(run_date))
-    )
+    # ── Leggi il delta del giorno (o TUTTO su full_refresh, es. rebuild dopo remap SITO_COD) ──
+    raw_df = spark.table(SOURCE_TABLE)
+    if not full_refresh:
+        raw_df = raw_df.filter(F.col("_bronze_load_date") == F.lit(run_date))
     rows_read = raw_df.count()
-    logger.info(f"Righe lette da {SOURCE_TABLE} per _bronze_load_date={run_date}: {rows_read}")
+    logger.info(f"Righe lette da {SOURCE_TABLE} ({'FULL' if full_refresh else '_bronze_load_date='+run_date}): {rows_read}")
 
     check_not_null(raw_df, ["MAG_SITO_COD", "PSP_NUMETIC", "PSP_DATABOLLA"], NOTEBOOK_NAME)
     check_row_count(raw_df, min_rows=0, notebook_name=NOTEBOOK_NAME)
@@ -106,12 +111,15 @@ try:
     silver_df = (
         deduped_df
         .withColumn("DATA_BOLLA",       F.col("DATA_BOLLA").cast("date"))
-        .withColumn("DATA_SCADENZA",    F.col("DATA_SCADENZA").cast("date"))
+        # PSP_DATA_SCADENZA e' un Julian Day Number legacy (come le altre date Logistix);
+        # un cast("date") diretto interpreterebbe il numero come giorni dal 1970 producendo
+        # anni ~8710 → "year 2461373 is out of range" nel late-arriving handler (Gold).
+        .withColumn("DATA_SCADENZA",    julian_to_date(F.col("DATA_SCADENZA")))
         .withColumn("DATA_INSERIMENTO", F.col("DATA_INSERIMENTO").cast("timestamp"))
         .withColumn("PESO_LORDO",       F.col("PESO_LORDO").cast("decimal(12,3)"))
         .withColumn("PESO_MEDIO",       F.col("PESO_MEDIO").cast("decimal(12,3)"))
-        .withColumn("NRO_COLLI",        F.col("NRO_COLLI").cast("int"))
-        .withColumn("PZ_PER_CARTONE",   F.col("PZ_PER_CARTONE").cast("int"))
+        .withColumn("NRO_COLLI",        F.col("NRO_COLLI").cast("double").cast("int"))
+        .withColumn("PZ_PER_CARTONE",   F.col("PZ_PER_CARTONE").cast("double").cast("int"))
         .withColumn("QTA_UF_RILEVATA",  F.col("QTA_UF_RILEVATA").cast("decimal(12,3)"))
         .withColumn("CAUZ_PRINC_TARA",  F.col("CAUZ_PRINC_TARA").cast("decimal(12,3)"))
         .withColumn("CAUZ_SECOND_TARA", F.col("CAUZ_SECOND_TARA").cast("decimal(12,3)"))
@@ -127,9 +135,10 @@ try:
     rows_clean = silver_df.count()
     logger.info(f"Righe dopo deduplica: {rows_clean}")
 
-    # ── MERGE INTO Silver (CTAS la prima volta) ───────────────────────────────
-    if not spark.catalog.tableExists(TARGET_TABLE):
-        logger.info(f"Creazione iniziale tabella {TARGET_TABLE}")
+    # ── MERGE INTO Silver (OVERWRITE su full_refresh / prima volta) ───────────
+    # full_refresh -> OVERWRITE: SITO_COD (rimappato alias->numerico) e' in chiave merge (LL-026). ACT_9026.
+    if full_refresh or not spark.catalog.tableExists(TARGET_TABLE):
+        logger.info(f"{'FULL REFRESH' if full_refresh else 'Creazione iniziale'} — OVERWRITE {TARGET_TABLE}")
         (
             silver_df.write
             .format("delta")

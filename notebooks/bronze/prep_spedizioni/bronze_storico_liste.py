@@ -13,8 +13,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from utils import get_catalog, detect_format, read_landing
@@ -103,7 +107,6 @@ bronze_df = (
     raw_df
     .withColumn("_bronze_load_date", F.lit(run_date).cast("date"))
     .withColumn("_bronze_insert_ts", F.current_timestamp())
-    .withColumn("_source_file", F.input_file_name())
 )
 # PRUNING update: firma del contenuto riga (solo colonne business, non i metadati _*).
 # Coalesce con sentinella per non confondere null e stringa vuota.
@@ -119,8 +122,9 @@ bronze_df = bronze_df.withColumn(
 # COMMAND ----------
 
 # Schema-evolution sul MERGE: assorbe eventuali colonne nuove del sorgente
-# (es. LSPRL_COD_ESTERNO_ORDINE) senza rompere whenMatchedUpdate/InsertAll.
-spark.conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
+# (es. LSPRL_COD_ESTERNO_ORDINE). In serverless la conf spark.databricks.delta.schema.
+# autoMerge.enabled e' VIETATA (CONFIG_NOT_AVAILABLE): si usa .withSchemaEvolution() sul
+# merge builder (Delta 3.x) e .option("mergeSchema","true") sulla CTAS. (fix run 7-job)
 
 if not spark.catalog.tableExists(FULL_TARGET):
     bronze_df.write.format("delta").option("mergeSchema", "true").saveAsTable(FULL_TARGET)
@@ -135,6 +139,7 @@ else:
     # -> NON propagata a valle (clean/prep incrementale la ignora). Delta reale, non finestra.
     (DeltaTable.forName(spark, FULL_TARGET).alias("tgt")
      .merge(bronze_df.alias("src"), cond)
+     .withSchemaEvolution()  # serverless-safe: sostituisce la conf autoMerge (Delta 3.x)
      .whenMatchedUpdate(condition="tgt._row_hash <> src._row_hash", set=update_set)
      .whenNotMatchedInsertAll()
      .execute())

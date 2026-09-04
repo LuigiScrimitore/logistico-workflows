@@ -15,8 +15,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from pyspark.sql import functions as F
@@ -111,9 +115,17 @@ for legacy_tab, lu_name in LOOKUP_MAP.items():
           .withColumn("_lu_insert_ts", F.current_timestamp())
           .withColumn("_lu_source", F.lit(f"CDT_DW.{legacy_tab} (workaround OP-02)")))
 
-    n = df.count()
     target = f"{target_schema}.{lu_name}"
     keys = MERGE_KEYS.get(lu_name)
+    if keys:
+        # dedup sorgente sulla chiave (lookup): 1 riga/chiave -> evita MULTIPLE_SOURCE_ROW_MATCHING
+        # nel MERGE e il fan-out nei join a valle.
+        _b = df.count()
+        df = df.dropDuplicates(keys)
+        _d = _b - df.count()
+        if _d:
+            logger.warning(f"  {legacy_tab}: {_d} duplicati su chiave {keys} rimossi (dedup lookup)")
+    n = df.count()
     if keys and spark.catalog.tableExists(target):
         # Delta incrementale: upsert sulla chiave (preserva la baseline).
         cond = " AND ".join(f"tgt.{k} <=> src.{k}" for k in keys)

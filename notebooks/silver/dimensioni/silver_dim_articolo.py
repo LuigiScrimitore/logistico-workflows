@@ -10,6 +10,10 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 # DEPRECATO (OP-02): dimensione master fornita dal flusso Retail Master Data (LU_*).
 # Non eseguire in produzione: il Gold legge la lookup condivisa in sola lettura.
 # Mantenuto per tracciabilita'; rimuovere/ridiscutere a valle della conferma Reply.

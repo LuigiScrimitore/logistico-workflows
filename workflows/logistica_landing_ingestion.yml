@@ -55,8 +55,8 @@ resources:
         - environment_key: default
           spec:
             environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-            dependencies:
-              - logistica_utils==1.0.4
+            # [TEMP LOCALE — smoke test] wheel via %pip nei notebook (DBR-05/ADR-0025)
+            dependencies: []
 
       tasks:
 
@@ -176,6 +176,32 @@ resources:
               landing_base_path: "{{job.parameters.landing_base_path}}"
               file_format: "{{job.parameters.file_format}}"
               siti: "{{job.parameters.siti}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        # Anagrafica siti logistici (ACT_9026): autorita' per dim_sito.
+        - task_key: bronze_s_logistix
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_s_logistix.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
+          max_retries: 2
+          timeout_seconds: 7200
+
+        # Storico mapping magazzino num<->alfa (ACT_9026): codice numerico per dim_sito.
+        - task_key: bronze_wl1_mag_sito_storico
+          environment_key: default
+          notebook_task:
+            notebook_path: ../notebooks/bronze/anagrafiche/bronze_wl1_mag_sito_storico.py
+            base_parameters:
+              env: "{{job.parameters.env}}"
+              run_date: "{{job.parameters.run_date}}"
+              landing_base_path: "{{job.parameters.landing_base_path}}"
+              file_format: "{{job.parameters.file_format}}"
           max_retries: 2
           timeout_seconds: 7200
 

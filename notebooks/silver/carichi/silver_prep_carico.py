@@ -37,8 +37,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_row_count
@@ -227,12 +231,13 @@ try:
             .saveAsTable(TARGET_TABLE))
         logger.info(f"CTAS {TARGET_TABLE} ({rows_out} righe)")
     else:
-        # Run successivi: dynamic partition overwrite (solo ANNO_MESE corrente)
-        spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
+        # Run successivi: dynamic partition overwrite (solo ANNO_MESE corrente).
+        # Opzione del writer Delta: su serverless (Spark Connect) `spark.conf.set` di
+        # spark.sql.sources.partitionOverwriteMode e' vietata -> si usa l'option del writer.
         (prep_df.write.format("delta").mode("overwrite")
+            .option("partitionOverwriteMode", "dynamic")
             .partitionBy("ANNO_MESE")
             .saveAsTable(TARGET_TABLE))
-        spark.conf.set("spark.sql.sources.partitionOverwriteMode", "static")
         logger.info(f"OVERWRITE (dyn) {TARGET_TABLE} ({rows_out} righe)")
 
     logger.info(f"END {NOTEBOOK_NAME} | righe={rows_out}")

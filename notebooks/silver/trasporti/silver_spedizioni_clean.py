@@ -11,8 +11,12 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install /Volumes/landing_dev/logistica/files/_wheels/logistica_utils-1.0.0-py3-none-any.whl
+
+# COMMAND ----------
+
 import sys
-sys.path.insert(0, "/Workspace/Repos/logistico/logistica_utils")
+import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
 from dq_helper import check_not_null, check_row_count
@@ -111,8 +115,9 @@ try:
     logger.info(f"Righe silver (dedup per SP_ID): {rows_clean}")
     check_row_count(silver_df, min_rows=0, notebook_name=NOTEBOOK_NAME)
 
-    if not spark.catalog.tableExists(TARGET_TABLE):
-        logger.info(f"Prima esecuzione — CTAS {TARGET_TABLE}")
+    if full_refresh or not spark.catalog.tableExists(TARGET_TABLE):
+        # full_refresh / prima esecuzione: OVERWRITE completo (clean slate). ACT_9026.
+        logger.info(f"{'FULL REFRESH' if full_refresh else 'Prima esecuzione'} — OVERWRITE {TARGET_TABLE}")
         (silver_df.write.format("delta").mode("overwrite")
          .option("overwriteSchema", "true").saveAsTable(TARGET_TABLE))
     else:

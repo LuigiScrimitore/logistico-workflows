@@ -57,8 +57,8 @@ resources:
         - environment_key: default
           spec:
             environment_version: "2"   # allineare alla versione serverless raccomandata al 1o deploy
-            dependencies:
-              - logistica_utils==1.0.4
+            # [TEMP LOCALE] wheel via %pip nei notebook (DBR-05/ADR-0025)
+            dependencies: []
 
       tasks:
 
@@ -88,30 +88,6 @@ resources:
           max_retries: 2
           timeout_seconds: 7200
 
-        - task_key: bronze_trasporti
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/bronze/trasporti/bronze_trasporti.py
-            base_parameters:
-              env: "{{job.parameters.env}}"
-              run_date: "{{job.parameters.run_date}}"
-              landing_base_path: "{{job.parameters.landing_base_path}}"
-              file_format: "{{job.parameters.file_format}}"
-          max_retries: 2
-          timeout_seconds: 7200
-
-        - task_key: bronze_vettori
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/bronze/trasporti/bronze_vettori.py
-            base_parameters:
-              env: "{{job.parameters.env}}"
-              run_date: "{{job.parameters.run_date}}"
-              landing_base_path: "{{job.parameters.landing_base_path}}"
-              file_format: "{{job.parameters.file_format}}"
-          max_retries: 2
-          timeout_seconds: 7200
-
         - task_key: bronze_vettori_track
           environment_key: default
           notebook_task:
@@ -126,16 +102,6 @@ resources:
 
 
         # -- Silver (cleansing + curated) ------------------------
-
-        - task_key: silver_t_vettori
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/silver/cdt_estr/silver_t_vettori.py
-            base_parameters:
-              env: "{{job.parameters.env}}"
-              run_date: "{{job.parameters.run_date}}"
-          max_retries: 2
-          timeout_seconds: 7200
 
         - task_key: silver_automezzi_clean
           depends_on:
@@ -189,16 +155,6 @@ resources:
           environment_key: default
           notebook_task:
             notebook_path: ../notebooks/silver/trasporti/silver_spedizioni_clean.py
-            base_parameters:
-              env: "{{job.parameters.env}}"
-              run_date: "{{job.parameters.run_date}}"
-          max_retries: 2
-          timeout_seconds: 7200
-
-        - task_key: silver_vettori_clean
-          environment_key: default
-          notebook_task:
-            notebook_path: ../notebooks/silver/trasporti/silver_vettori_clean.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
