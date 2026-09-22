@@ -136,8 +136,10 @@ try:
             n_imp = imp.count()
             joincond = reduce(lambda a, b: a & b,
                               [F.col(f"s.{k}").eqNullSafe(F.col(f"imp.{k}")) for k in KEYS])
-            # cache: agg_src e' riusato (DQ + groupBy + MERGE) -> evita di ricalcolare il join.
-            agg_src = s.join(imp, joincond, "inner").select("s.*").cache()
+            # agg_src e' riusato (DQ + groupBy + MERGE). NB serverless: .cache()/.persist()
+            # NON supportati ([NOT_SUPPORTED_WITH_SERVERLESS] PERSIST TABLE, LL-029) -> nessun
+            # cache: Photon + disk cache del serverless rimaterializzano il join a costo accettabile.
+            agg_src = s.join(imp, joincond, "inner").select("s.*")
             logger.info(f"INCREMENTALE pattern #2: {n_imp} chiavi impattate (batch {run_date})")
     else:
         agg_src = src
