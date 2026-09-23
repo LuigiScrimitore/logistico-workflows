@@ -48,6 +48,12 @@ targets:
   dev:
     mode: development
     default: true
+    permissions:
+      # I job gestiti dal bundle (DAB) non ammettono grant a mano: il deploy li
+      # sovrascriverebbe. I permessi si dichiarano qui e valgono per TUTTE le risorse
+      # del bundle -> Group-Engineering-dev vede/gestisce i job [dev <mi>] logistica_*. (LL-032)
+      - level: CAN_MANAGE
+        group_name: Group-Engineering-dev
     workspace:
       # mode:development: ogni sandbox deploya nella HOME dell'utente (default DAB),
       # dove i permessi ci sono gia'. La cartella condivisa /Workspace/data-platform/etl/logistica
