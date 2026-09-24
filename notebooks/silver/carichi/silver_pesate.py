@@ -99,7 +99,11 @@ try:
     )
 
     # ── Deduplica: ultima versione per chiave naturale ────────────────────────
-    w = Window.partitionBy("SITO_COD", "ETICHET_NRO", "DATA_BOLLA").orderBy(F.col("_bronze_insert_ts").desc())
+    # LL-034: la chiave NON include DATA_BOLLA — è instabile tra ri-estrazioni (finestra lookback,
+    # LL-024): la stessa pesata viene ri-estratta con DATA_BOLLA/BOLLA_NRO che cambiano (placeholder
+    # -> reale), duplicando la riga e provocando fan-out in F_CARICO (join carichi su BOLLA_NRO).
+    # Identità stabile della pesata = (SITO_COD, CARICO_LOG_NRO, ETICHET_NRO); si tiene l'ultimo snapshot.
+    w = Window.partitionBy("SITO_COD", "CARICO_LOG_NRO", "ETICHET_NRO").orderBy(F.col("_bronze_insert_ts").desc())
     deduped_df = (
         renamed_df
         .withColumn("_rn", F.row_number().over(w))
@@ -153,9 +157,11 @@ try:
             .merge(
                 silver_df.alias("src"),
                 (
+                    # LL-034: chiave stabile senza DATA_BOLLA (che varia tra ri-estrazioni) — così le
+                    # ri-estrazioni fanno update-in-place invece di accumulare duplicati.
                     "tgt.SITO_COD = src.SITO_COD AND "
-                    "tgt.ETICHET_NRO = src.ETICHET_NRO AND "
-                    "tgt.DATA_BOLLA = src.DATA_BOLLA"
+                    "tgt.CARICO_LOG_NRO = src.CARICO_LOG_NRO AND "
+                    "tgt.ETICHET_NRO = src.ETICHET_NRO"
                 )
             )
             .whenMatchedUpdateAll()
