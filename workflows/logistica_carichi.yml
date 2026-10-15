@@ -38,6 +38,10 @@ resources:
           default: "dev"
         - name: run_date
           default: "{{job.start_time.iso_date}}"
+        # Recupero di piu' giorni: i silver a watermark (OP-35) ripartono da questa data (esclusa).
+        # Vuoto = watermark persistente (worklog 2026-10-15-03).
+        - name: process_from
+          default: ""
         - name: landing_base_path
           default: ${var.landing_base_path}
         - name: file_format
@@ -130,6 +134,7 @@ resources:
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
+              process_from: "{{job.parameters.process_from}}"
           max_retries: 2
           timeout_seconds: 7200
 
@@ -142,6 +147,7 @@ resources:
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
+              process_from: "{{job.parameters.process_from}}"
           max_retries: 2
           timeout_seconds: 7200
 
