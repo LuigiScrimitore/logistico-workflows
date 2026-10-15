@@ -4,8 +4,8 @@ resources:
       ###############################################################################
       # Logistico 2.0 — Workflow: logistica_carichi
       # Versione: 3.0.0 — 2026-06-08
-      # Schedule: ogni giorno 02:00 Europe/Rome
-      # Dipende da: logistica_landing_ingestion (00:30), logistica_dim_refresh (01:00)
+      # Schedule: ogni giorno 07:30 Europe/Rome (worklog 2026-10-15-01)
+      # Dipende da: logistica_landing_ingestion (07:00), logistica_dim_refresh (07:15)
       ###############################################################################
 
       name: logistica_carichi
@@ -15,13 +15,15 @@ resources:
         Silver=MERGE su chiave naturale, Gold=replaceWhere su ANNO_MESE / DATA.
 
       schedule:
-        quartz_cron_expression: "0 0 2 * * ?"
+        quartz_cron_expression: "0 30 7 * * ?"
         timezone_id: "Europe/Rome"
-        # pause_status NON dichiarato: dev (mode:development) -> PAUSED, prod -> attivo (LL-037)
+        # Attivo solo nel deploy CI (MI) e in prod; sandbox personali in pausa (LL-037, worklog 2026-10-15-01)
+        pause_status: ${var.schedule_pause_status}
 
       email_notifications:
         on_failure:
           - luigi.scrimitore@aperion.it
+          - francesco.foconi@quanticx.com
         no_alert_for_skipped_runs: true
 
       max_concurrent_runs: 1

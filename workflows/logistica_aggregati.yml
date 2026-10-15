@@ -4,7 +4,7 @@ resources:
       ###############################################################################
       # Logistico 2.0 — Workflow: logistica_datamart (ex logistica_aggregati)
       # Versione: 3.0.0 — 2026-06-08
-      # Schedule: ogni giorno 06:00 Europe/Rome
+      # Schedule: ogni giorno 08:30 Europe/Rome (dopo la landing ODI delle 06:00, worklog 2026-10-15-01)
       # Dipende da: tutti i workflow giornalieri (fact F_* gia' calcolate).
       ###############################################################################
 
@@ -20,13 +20,15 @@ resources:
         replaceWhere su ANNO_MESE / DATA_PREPARAZ per idempotenza.
 
       schedule:
-        quartz_cron_expression: "0 0 6 * * ?"
+        quartz_cron_expression: "0 30 8 * * ?"
         timezone_id: "Europe/Rome"
-        # pause_status NON dichiarato: dev (mode:development) -> PAUSED, prod -> attivo (LL-037)
+        # Attivo solo nel deploy CI (MI) e in prod; sandbox personali in pausa (LL-037, worklog 2026-10-15-01)
+        pause_status: ${var.schedule_pause_status}
 
       email_notifications:
         on_failure:
           - luigi.scrimitore@aperion.it
+          - francesco.foconi@quanticx.com
         on_success:
           - luigi.scrimitore@aperion.it
         no_alert_for_skipped_runs: true

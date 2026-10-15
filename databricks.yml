@@ -28,6 +28,12 @@ variables:
   email_alert:
     description: "Email destinatario per alert failure"
     default: luigi.scrimitore@aperion.it
+  schedule_pause_status:
+    description: >-
+      Stato degli schedule dei job (LL-037). Default PAUSED: i deploy delle sandbox personali restano in pausa.
+      La CI deploy_dev passa --var="schedule_pause_status=UNPAUSED" (job della Managed Identity attivi).
+      Prod = PAUSED fino al go-live (worklog 2026-10-15-01), poi UNPAUSED.
+    default: PAUSED
 
 # NB (ADR-0009): job su compute SERVERLESS — nessun job cluster classico. Il wheel
 # `logistica_utils` è dichiarato in `environments` di ciascun workflow come dipendenza
@@ -62,7 +68,9 @@ targets:
     variables:
       env: dev
       email_alert: luigi.scrimitore@aperion.it
-      landing_base_path: "/Volumes/landing_dev/logistica/files"
+      # Landing dev letta direttamente dal container logisticolanding (cutover 2026-10-14, worklog 2026-10-14-01):
+      # READ_FILES via External Location logisticolanding_dev -> Group-Engineering-dev (contiene la MI dei job).
+      landing_base_path: "abfss://logisticolanding@stdevdataplatformweudata.dfs.core.windows.net"
       retail_master_schema: "bronze_dev.condiviso"
     presets:
       tags:
@@ -79,6 +87,7 @@ targets:
       env: prod
       email_alert: luigi.scrimitore@aperion.it
       landing_base_path: "/Volumes/landing_prod/logistica/files"
+      schedule_pause_status: PAUSED   # fino al go-live: poi UNPAUSED (worklog 2026-10-15-01)
       retail_master_schema: "bronze_prod.condiviso"
     presets:
       tags:

@@ -4,7 +4,7 @@ resources:
       ###############################################################################
       # Logistico 2.0 — Workflow: logistica_trasporti
       # Versione: 3.0.0 — 2026-06-08
-      # Schedule: ogni giorno 05:00 Europe/Rome
+      # Schedule: ogni giorno 08:00 Europe/Rome (worklog 2026-10-15-01)
       # Dipende da: logistica_carichi (Bronze sto_tes_carichi -> silver_ordini),
       #             logistica_landing_ingestion (Bronze t_trasp_mtv per silver_trasporti).
       # NOTE: i 4 Bronze JDBC residui (OP-26) sono ESCLUSI dallo scheduling fino a migrazione.
@@ -19,13 +19,15 @@ resources:
         AREA NON CORE (flag header sui notebook). Quantita'/lead time disponibili come PROXY (OP-27).
 
       schedule:
-        quartz_cron_expression: "0 0 5 * * ?"
+        quartz_cron_expression: "0 0 8 * * ?"
         timezone_id: "Europe/Rome"
-        # pause_status NON dichiarato: dev (mode:development) -> PAUSED, prod -> attivo (LL-037)
+        # Attivo solo nel deploy CI (MI) e in prod; sandbox personali in pausa (LL-037, worklog 2026-10-15-01)
+        pause_status: ${var.schedule_pause_status}
 
       email_notifications:
         on_failure:
           - luigi.scrimitore@aperion.it
+          - francesco.foconi@quanticx.com
         no_alert_for_skipped_runs: true
 
       max_concurrent_runs: 1

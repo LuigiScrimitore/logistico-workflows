@@ -25,7 +25,8 @@ validate:
 deploy_dev:
   stage: deploy
   script:
-    - databricks bundle deploy -t dev
+    # Schedule attivi solo nel deploy della CI (job della MI); le sandbox personali restano in pausa (LL-037).
+    - databricks bundle deploy -t dev --var="schedule_pause_status=UNPAUSED"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 

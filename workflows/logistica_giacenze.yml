@@ -4,7 +4,7 @@ resources:
       ###############################################################################
       # Logistico 2.0 — Workflow: logistica_giacenze
       # Versione: 3.0.0 — 2026-06-08
-      # Schedule: ogni giorno 03:30 Europe/Rome
+      # Schedule: ogni giorno 07:45 Europe/Rome (worklog 2026-10-15-01)
       # Dipende da: logistica_landing_ingestion (T_STOCK gia' caricato in Bronze SNAPSHOT)
       ###############################################################################
 
@@ -13,16 +13,18 @@ resources:
         Pipeline giacenze: Silver giacenza_daily (filtro _bronze_load_date = run_date) +
         Silver giacenza_aggregata (cross-magazzino) + Gold F_GIACENZE_DAILY (replaceWhere DATA_FOTO).
         Pattern Bronze=SNAPSHOT (gia' caricato dal landing_ingestion).
-        L'aggregato mensile A_GIACENZE_MONTHLY e' nel workflow logistica_datamart (06:00).
+        L'aggregato mensile A_GIACENZE_MONTHLY e' nel workflow logistica_datamart (08:30).
 
       schedule:
-        quartz_cron_expression: "0 30 3 * * ?"
+        quartz_cron_expression: "0 45 7 * * ?"
         timezone_id: "Europe/Rome"
-        # pause_status NON dichiarato: dev (mode:development) -> PAUSED, prod -> attivo (LL-037)
+        # Attivo solo nel deploy CI (MI) e in prod; sandbox personali in pausa (LL-037, worklog 2026-10-15-01)
+        pause_status: ${var.schedule_pause_status}
 
       email_notifications:
         on_failure:
           - luigi.scrimitore@aperion.it
+          - francesco.foconi@quanticx.com
         no_alert_for_skipped_runs: true
 
       max_concurrent_runs: 1
