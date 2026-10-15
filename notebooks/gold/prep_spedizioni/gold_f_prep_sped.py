@@ -66,9 +66,12 @@ try:
         logger.warning("Sorgente prep_sped vuota. Notebook terminato.")
         dbutils.notebook.exit("NO_DATA")
 
-    # Colonna-data per partizione (dal timestamp inizio prelievo).
+    # Colonna-data per partizione (dal timestamp inizio prelievo). Le righe scartate mai prelevate
+    # (TIPO_SCAR 09/10) non hanno data di prelievo in Logistix: per la sola partizione si usa la data
+    # dell'ordine; DATA_PREL_INIZ resta NULL come nel legacy (worklog 2026-10-15-02).
+    data_ord = F.to_date(F.try_to_timestamp(F.col("GIORNO_ORD_ID").cast("string"), F.lit("yyyyMMdd")))
     fact = (src
-            .withColumn("DATA_PREL", F.col("DATA_PREL_INIZ").cast(DateType()))
+            .withColumn("DATA_PREL", F.coalesce(F.col("DATA_PREL_INIZ").cast(DateType()), data_ord))
             .withColumn("PDV_COD", F.col("SOCIO_COD"))   # socio = PDV destinatario (codice naturale)
             .withColumn("DWH_UPDATED_AT", F.current_timestamp()))
 
@@ -116,6 +119,10 @@ try:
     logger.info(f"F_PREP_SPED righe: {rows}")
 
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {GOLD_CATALOG}.logistica")
+    # La scrittura dynamic non tocca partizioni assenti dal batch: rimuove l'eventuale partizione
+    # DATA_PREL NULL rimasta da run precedenti al fallback sopra (altrimenti righe doppie).
+    if spark.catalog.tableExists(TARGET_TABLE):
+        spark.sql(f"DELETE FROM {TARGET_TABLE} WHERE DATA_PREL IS NULL")
     (fact.write.format("delta").mode("overwrite").option("partitionOverwriteMode", "dynamic")
         .option("mergeSchema", "true")
         .partitionBy("DATA_PREL")
