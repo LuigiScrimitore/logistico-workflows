@@ -182,9 +182,10 @@ resources:
           timeout_seconds: 7200
 
         - task_key: gold_a_stock_mensile
+          # Un solo depends_on: con la chiave duplicata YAML teneva solo l'ultima e
+          # gold_dm_giacenze_monthly si perdeva (LL-038, worklog 2026-10-15-02).
           depends_on:
             - task_key: gold_dm_giacenze_monthly
-          depends_on:
             - task_key: lad_f_carico
             - task_key: lad_f_prep_sped
             - task_key: lad_f_turno_prep_sito
