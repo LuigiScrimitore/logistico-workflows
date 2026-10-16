@@ -52,7 +52,7 @@ resources:
         - name: file_format
           default: "auto"
         - name: siti
-          default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
+          default: ${var.siti_logistix}
         # "true" = silver_prep_prep_sped rielabora tutte le liste/bolle uniche (recupero buchi, LL-038)
         - name: full_refresh
           default: "false"

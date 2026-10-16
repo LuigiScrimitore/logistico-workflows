@@ -28,6 +28,11 @@ variables:
   email_alert:
     description: "Email destinatario per alert failure"
     default: luigi.scrimitore@aperion.it
+  siti_logistix:
+    description: >-
+      Siti Logistix elaborati dai job (sottocartelle di logistix-landing/). Devono coincidere con i db-link attivi
+      dell'estrattore (scripts/landing_simulator/config.yaml). Worklog 2026-10-16-02, ACT_9030.
+    default: "lbvx,lcax,leax,lfax,lfmx,lfqx,lfvx,lgax,lgcx,lgnx,lgqx,lgrx,lgvx,lgzx,lonx,losx,lslx,lsmx,lsvx"
   schedule_pause_status:
     description: >-
       Stato degli schedule dei job (LL-037). Default PAUSED: i deploy delle sandbox personali restano in pausa.

@@ -37,7 +37,7 @@ resources:
 
       parameters:
         - name: siti
-          default: "lgax,lgcx,lcax,lccx,lexx,locx,lonx,lscx,lslx"
+          default: ${var.siti_logistix}
         - name: env
           default: "dev"
         - name: run_date
