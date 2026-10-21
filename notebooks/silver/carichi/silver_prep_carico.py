@@ -1,8 +1,11 @@
 # Databricks notebook source
 # Area: Carichi — Fact carico (grain ETICHETTA)
 # Layer: Silver PREP (Fase 1 modellazione + Fase 2 calcolo)  →  silver.logistica_curated.carico
-# Versione: 2.0.0
-# Data: 2026-07-02
+# Versione: 2.1.0
+# Data: 2026-10-21
+#   2.1.0 (ACT_9033): join testata a livello CARICO (sito,carico) invece di (sito,carico,data,ordine).
+#          Il bronze sto_tes_carichi ha 1 riga/carico → la join su ORDINE scartava ~17% delle etichette
+#          dei carichi multi-ordine (copertura F_CARICO 82%→~99% vs CDT_DW).
 # Descrizione: STRATO PREP — port fedele della logica ODI CDT_ESTR.V_CARICO_ORDINARIO
 #              (fonte reale: DOCS/99. SCRIPT/CDT_ESTR_VISTE.sql + CDT_ESTR.sql).
 #
@@ -123,12 +126,15 @@ try:
                (F.col("p.ART_EAN13")       == F.col("r.MSI_COD")),
                "inner"))
 
-    # ── (⋈ t) attributi di testata su (sito,carico,data,ordine) ───────────────────
-    j = (j.join(df_t.alias("t"),
+    # ── (⋈ t) attributi di testata a livello CARICO (sito,carico) ─────────────────
+    #    FIX ACT_9033: il bronze sto_tes_carichi ha 1 riga/carico (merge key carico+magazzino
+    #    senza ordine → i carichi multi-ordine sono collassati). Joinare su (DATA,ORDINE) scartava
+    #    ~17% delle etichette (le righe degli ordini collassati). La testata e' un'entita' per-carico:
+    #    join su (SITO,CARICO) → 0 fan-out (dedup di sicurezza) e copertura ~99%.
+    t_carico = df_t.dropDuplicates(["SITO_COD", "CARICO_NRO"])
+    j = (j.join(t_carico.alias("t"),
                 (F.col("r.SITO_COD")   == F.col("t.SITO_COD")) &
-                (F.col("r.CARICO_NRO") == F.col("t.CARICO_NRO")) &
-                (F.col("r.DATA_CARICO")== F.col("t.DATA_CARICO")) &
-                (F.col("r.ORDINE_NRO") == F.col("t.ORDINE_NRO")),
+                (F.col("r.CARICO_NRO") == F.col("t.CARICO_NRO")),
                 "inner"))
 
     # ── FASE 2: calcolo misure (dalla pesata) + campi derivati ────────────────────

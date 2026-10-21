@@ -150,10 +150,16 @@ def extract(conn, da: str, a: str, siti_filter, out_root: Path) -> None:
     tot_rows = 0
     for day in _days(da, a):
         ds = day.isoformat()
+        # ART_RADICE_COD/ART_VAR_LOGIS_COD: decodificati dal surrogate ART_VAR_LOGIS_ID via
+        # L_ART_VAR_LOGIS (ART_COD su F_CARICO e' '0'/placeholder). Allineati 100% al gold (ACT_9032)
+        # → servono per il drill della quadratura per radice+variante logistica.
         sql = f"""
-            SELECT f.*, g.GIORNO_DT
+            SELECT f.*, g.GIORNO_DT,
+                   v.ART_RADICE_COD    AS ART_RADICE_COD,
+                   v.ART_VAR_LOGIS_COD AS ART_VAR_LOGIS_COD
             FROM {ORACLE_SCHEMA}.{ORACLE_TABLE} f
             JOIN {ORACLE_SCHEMA}.L_GIORNO g ON g.GIORNO_ID = f.{GIORNO_FK}
+            LEFT JOIN {ORACLE_SCHEMA}.L_ART_VAR_LOGIS v ON v.ART_VAR_LOGIS_ID = f.ART_VAR_LOGIS_ID
             WHERE g.GIORNO_DT = TO_DATE(:d,'YYYY-MM-DD')
             {sito_clause}
         """
