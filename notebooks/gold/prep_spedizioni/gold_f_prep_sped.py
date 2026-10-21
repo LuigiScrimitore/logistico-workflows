@@ -105,7 +105,7 @@ try:
     LOGISTIC_LU = [
         ("MAG_SITO_COD",            "LU_SITO",       "SITO_COD"),
         ("OPER_PREP_COD",           "LU_OPERATORE",  "OPERATORE_COD"),
-        ("VETTORE_PRESU_SPED_COD",  "LU_CORRIERE",   "CORRIERE_COD"),
+        ("VETTORE_PRESU_SPED_COD",  "LU_VETTORE",   "VETTORE_COD"),
     ]
     for fk, lu_tab, lu_pk in LOGISTIC_LU:
         try:

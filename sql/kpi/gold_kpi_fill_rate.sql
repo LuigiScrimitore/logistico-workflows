@@ -4,13 +4,13 @@
 -- NOTA OP-27: F_ORDINI non ha quantita' ordinate/consegnate (sono nel dettaglio carico).
 --             Il fill-rate "quantitativo" canonico non e' calcolabile sui dati attuali;
 --             esponiamo il rapporto NUM_TRASPORTI/NUM_ORDINI come proxy di servizio.
--- Lookup: LU_SITO, LU_CORRIERE.
+-- Lookup: LU_SITO, LU_VETTORE.
 -- =============================================================================
 CREATE OR REPLACE VIEW gold_prod.logistica.kpi_fill_rate AS
 SELECT
     a.SITO_COD,
     s.SITO_DESC,
-    a.CORRIERE_COD,
+    a.VETTORE_COD,
     c.RAGIONE_SOCIALE                                  AS CORRIERE_DESC,
     a.ANNO_MESE,
     a.NUM_ORDINI,
@@ -25,4 +25,4 @@ SELECT
     a.COSTO_STIMATO_EUR_TOT
 FROM gold_prod.logistica_dm.A_OUTBOUND_MENSILE a
 LEFT JOIN gold_prod.logistica.LU_SITO     s ON a.SITO_COD     = s.SITO_COD
-LEFT JOIN gold_prod.logistica.LU_CORRIERE c ON a.CORRIERE_COD = c.CORRIERE_COD;
+LEFT JOIN gold_prod.logistica.LU_VETTORE c ON a.VETTORE_COD = c.VETTORE_COD;

@@ -174,7 +174,7 @@ try:
             F.col("r.ART_VAR").cast(StringType()).alias("ART_VAR_LOGIS_COD"),
             F.col("t.OPERATORE_COD").cast(StringType()).alias("OPERATORE_COD"),      # oper. validante
             F.col("r.RICEVITORE_COD").cast(StringType()).alias("RICEVITORE_COD"),    # oper. ricevente
-            F.col("t.CORRIERE_COD").cast(StringType()).alias("CORRIERE_COD"),        # vettore carico
+            F.col("t.VETTORE_COD").cast(StringType()).alias("VETTORE_COD"),        # vettore carico
             # Date (in CDT_DW sono FK GIORNO_*_ID)
             F.col("t.DATA_EMISSIONE_ORD").cast(DateType()).alias("DATA_EMISSIONE_ORD"),
             F.col("t.DATA_CONFERMA_ORD").cast(DateType()).alias("DATA_PREV_CONS_FORN"),

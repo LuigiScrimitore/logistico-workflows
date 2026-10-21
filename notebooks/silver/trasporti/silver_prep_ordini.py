@@ -64,7 +64,7 @@ try:
     prep_df = (
         src.select(
             "SITO_COD", "ORDINE_NRO", "CARICO_NRO", "MAG_COD",
-            "FORNITORE_COD", "CORRIERE_COD",
+            "FORNITORE_COD", "VETTORE_COD",
             "DATA_CARICO", "DATA_EMISS_ORDINE", "DATA_CONFERMA_ORDINE",
             "TIPO_ORDINE", "TIPO_CONSEGNA", "FLAG_TRASFERITO",
         )

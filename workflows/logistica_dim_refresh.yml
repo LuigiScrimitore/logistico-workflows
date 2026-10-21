@@ -13,8 +13,8 @@ resources:
       name: logistica_dim_refresh
       description: |
         Refresh dimensioni LOGISTICHE:
-          - Silver: dim_sito, dim_operatore, dim_corriere, dim_topografia
-          - Gold:   LU_SITO, LU_OPERATORE, LU_CORRIERE, LU_TOPOGRAFIA, LU_AREA_MERCL_LOGIS
+          - Silver: dim_sito, dim_operatore, dim_vettore, dim_topografia
+          - Gold:   LU_SITO, LU_OPERATORE, LU_VETTORE, LU_TOPOGRAFIA, LU_AREA_MERCL_LOGIS
         Le dimensioni master (articolo/fornitore/pdv/calendario -> LU_ART_RADICE, LU_FORNITORE,
         LU_PDV, LU_GIORNO/LU_MESE) NON sono qui: provengono dal flusso Retail Master Data (OP-02).
 
@@ -71,10 +71,10 @@ resources:
           max_retries: 2
           timeout_seconds: 7200
 
-        - task_key: silver_dim_corriere
+        - task_key: silver_dim_vettore
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/silver/dimensioni/silver_dim_corriere.py
+            notebook_path: ../notebooks/silver/dimensioni/silver_dim_vettore.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"
@@ -154,12 +154,12 @@ resources:
           max_retries: 2
           timeout_seconds: 7200
 
-        - task_key: gold_dim_corriere
+        - task_key: gold_dim_vettore
           depends_on:
-            - task_key: silver_dim_corriere
+            - task_key: silver_dim_vettore
           environment_key: default
           notebook_task:
-            notebook_path: ../notebooks/gold/dimensioni/gold_dim_corriere.py
+            notebook_path: ../notebooks/gold/dimensioni/gold_dim_vettore.py
             base_parameters:
               env: "{{job.parameters.env}}"
               run_date: "{{job.parameters.run_date}}"

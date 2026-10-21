@@ -94,7 +94,7 @@ try:
         .withColumnRenamed("STCAR_TIPO_ORDINE",    "TIPO_ORDINE")
         .withColumnRenamed("STCAR_COD_GESTIONE",   "GESTIONE_COD")
         .withColumnRenamed("STCAR_TIPO_CONSEGNA",  "TIPO_CONSEGNA")
-        .withColumnRenamed("STCAR_COD_CORRIERE",   "CORRIERE_COD")
+        .withColumnRenamed("STCAR_COD_CORRIERE",   "VETTORE_COD")
         .withColumnRenamed("STCAR_TIPO_PAGAMENTO", "TIPO_PAGAMENTO")
         .withColumnRenamed("STCAR_TIPO_TRASPORTO", "TIPO_TRASPORTO")
         .withColumnRenamed("STCAR_NRO_SOLLECITI",  "NRO_SOLLECITI")

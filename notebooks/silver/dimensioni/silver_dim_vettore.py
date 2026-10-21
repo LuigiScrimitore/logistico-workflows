@@ -6,7 +6,7 @@
 # Data: 2026-06-08
 # Descrizione: Dimensione Corriere/Vettore — da bronze.logistica.t_vettori (sistema CND).
 #              Colonne reali verificate (NON VET_RAGIONE_SOC / VET_FLG_ATTIVO, inesistenti):
-#                VET_CODICE->CORRIERE_COD, VET_DESCRIZIONE->RAGIONE_SOCIALE, VET_INDIRIZZO->INDIRIZZO,
+#                VET_CODICE->VETTORE_COD, VET_DESCRIZIONE->RAGIONE_SOCIALE, VET_INDIRIZZO->INDIRIZZO,
 #                VET_CITTA->CITTA, VET_PROVINCIA->PROVINCIA, VET_CAP->CAP, VET_STATO->FLG_ATTIVO.
 #              Anagrafica FULL -> overwrite completo (stato corrente).
 
@@ -43,15 +43,15 @@ run_date = dbutils.widgets.get("run_date")
 
 # COMMAND ----------
 
-NOTEBOOK_NAME  = "silver_dim_corriere"
+NOTEBOOK_NAME  = "silver_dim_vettore"
 BRONZE_CATALOG = get_catalog("bronze", env)
 SILVER_CATALOG = get_catalog("silver", env)
 SCHEMA         = "logistica"
 # FIX (scelta B): la staging WL1_VETTORI_TRASPO e' dismessa. Sorgente autoritativa =
 # vettori@TRACK (bronze.logistica.vettori_track), stesse colonne VET_* (WL1 ne era copia).
 SOURCE_TABLE   = f"{BRONZE_CATALOG}.{SCHEMA}.vettori_track"
-TARGET_TABLE   = f"{SILVER_CATALOG}.{SCHEMA}.dim_corriere"
-MERGE_KEY      = "CORRIERE_COD"
+TARGET_TABLE   = f"{SILVER_CATALOG}.{SCHEMA}.dim_vettore"
+MERGE_KEY      = "VETTORE_COD"
 
 logger = get_logger(NOTEBOOK_NAME)
 
@@ -79,7 +79,7 @@ try:
         .filter(F.col("_rn") == 1)
         # Mapping colonne reali VET_* -> business (cast espliciti)
         .select(
-            F.col("VET_CODICE").cast("string").alias("CORRIERE_COD"),
+            F.col("VET_CODICE").cast("string").alias("VETTORE_COD"),
             F.col("VET_DESCRIZIONE").cast("string").alias("RAGIONE_SOCIALE"),
             F.col("VET_INDIRIZZO").cast("string").alias("INDIRIZZO"),
             F.col("VET_CITTA").cast("string").alias("CITTA"),
@@ -89,7 +89,7 @@ try:
         )
         .withColumn("_silver_ts", F.current_timestamp())
         .select(
-            "CORRIERE_COD", "RAGIONE_SOCIALE", "INDIRIZZO", "CITTA",
+            "VETTORE_COD", "RAGIONE_SOCIALE", "INDIRIZZO", "CITTA",
             "PROVINCIA", "CAP", "FLG_ATTIVO", "_silver_ts",
         )
     )

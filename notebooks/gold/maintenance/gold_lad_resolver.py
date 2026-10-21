@@ -1,7 +1,7 @@
 # Databricks notebook source
 # Area: Gold — Manutenzione / LAD Resolver
 # Versione: 1.1.0  Data: 2026-07-05
-#   v1.1: config F_PREP_SPED completata (ART_RADICE_COD), CORRIERE_COD tolto da F_CARICO
+#   v1.1: config F_PREP_SPED completata (ART_RADICE_COD), VETTORE_COD tolto da F_CARICO
 #         (non-LAD, sentinel by-design), calcolo n_resolved pulito, retention/quarantena
 #         orphan residui (widget retention_days) — OP-32.
 # Tabella: (tutte le fact con colonne _COD_NAT)
@@ -86,8 +86,8 @@ def build_lad_config(fact: str, gold_cat: str, retail: str) -> list:
              "dim_fqn": f"{G}.logistica.LU_OPERATORE",   "dim_pk": "OPERATORE_COD"},
             {"fk_col": "RICEVITORE_COD", "nat_col": "RICEVITORE_COD_NAT",
              "dim_fqn": f"{G}.logistica.LU_OPERATORE",   "dim_pk": "OPERATORE_COD"},
-            # NB: CORRIERE_COD escluso — su F_CARICO il vettore è assente by-design (decisione
-            # rimozione join LU_CORRIERE dai carichi); resta sentinel -1 con NAT null → non è LAD.
+            # NB: VETTORE_COD escluso — su F_CARICO il vettore è assente by-design (decisione
+            # rimozione join LU_VETTORE dai carichi); resta sentinel -1 con NAT null → non è LAD.
         ],
         "F_PREP_SPED": [
             {"fk_col": "PDV_COD",                "nat_col": "PDV_COD_NAT",
@@ -99,7 +99,7 @@ def build_lad_config(fact: str, gold_cat: str, retail: str) -> list:
             {"fk_col": "OPER_PREP_COD",          "nat_col": "OPER_PREP_COD_NAT",
              "dim_fqn": f"{G}.logistica.LU_OPERATORE",   "dim_pk": "OPERATORE_COD"},
             {"fk_col": "VETTORE_PRESU_SPED_COD", "nat_col": "VETTORE_PRESU_SPED_COD_NAT",
-             "dim_fqn": f"{G}.logistica.LU_CORRIERE",    "dim_pk": "CORRIERE_COD"},
+             "dim_fqn": f"{G}.logistica.LU_VETTORE",    "dim_pk": "VETTORE_COD"},
         ],
         "F_TURNO_PREP_SITO": [
             {"fk_col": "PDV_COD",                "nat_col": "PDV_COD_NAT",
@@ -115,7 +115,7 @@ def build_lad_config(fact: str, gold_cat: str, retail: str) -> list:
             {"fk_col": "MAG_SITO_COD",     "nat_col": "MAG_SITO_COD_NAT",
              "dim_fqn": f"{G}.logistica.LU_SITO",     "dim_pk": "SITO_COD"},
             {"fk_col": "VETTORE_SPED_COD", "nat_col": "VETTORE_SPED_COD_NAT",
-             "dim_fqn": f"{G}.logistica.LU_CORRIERE", "dim_pk": "CORRIERE_COD"},
+             "dim_fqn": f"{G}.logistica.LU_VETTORE", "dim_pk": "VETTORE_COD"},
         ],
         "F_ORDINI": [
             {"fk_col": "FORNITORE_COD", "nat_col": "FORNITORE_COD_NAT",

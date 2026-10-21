@@ -7,7 +7,7 @@
 CREATE OR REPLACE VIEW gold_prod.logistica.kpi_resa_corrieri AS
 WITH base AS (
     SELECT
-        t.CORRIERE_COD,
+        t.VETTORE_COD,
         t.SITO_COD,
         DATE_FORMAT(t.DATA_BOLLA, 'yyyyMM') AS ANNO_MESE,
         t.LEAD_TIME_GG,
@@ -19,7 +19,7 @@ WITH base AS (
     FROM gold_prod.logistica.F_TRASPORTO t
 )
 SELECT
-    b.CORRIERE_COD,
+    b.VETTORE_COD,
     c.RAGIONE_SOCIALE                                          AS CORRIERE_DESC,
     b.SITO_COD,
     s.SITO_DESC,
@@ -36,6 +36,6 @@ SELECT
                           / NULLIF(SUM(CASE WHEN b.FLG_RITARDO_PROXY IS NOT NULL THEN 1 ELSE 0 END), 0)) DESC NULLS LAST)
                                                                AS RANK_PUNTUALITA
 FROM base b
-LEFT JOIN gold_prod.logistica.LU_CORRIERE c ON b.CORRIERE_COD = c.CORRIERE_COD
+LEFT JOIN gold_prod.logistica.LU_VETTORE c ON b.VETTORE_COD = c.VETTORE_COD
 LEFT JOIN gold_prod.logistica.LU_SITO     s ON b.SITO_COD     = s.SITO_COD
-GROUP BY b.CORRIERE_COD, c.RAGIONE_SOCIALE, b.SITO_COD, s.SITO_DESC, b.ANNO_MESE;
+GROUP BY b.VETTORE_COD, c.RAGIONE_SOCIALE, b.SITO_COD, s.SITO_DESC, b.ANNO_MESE;

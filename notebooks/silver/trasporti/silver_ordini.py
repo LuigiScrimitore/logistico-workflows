@@ -101,7 +101,7 @@ try:
             F.col("STCAR_NRO_ORDINE").cast("string").alias("ORDINE_NRO"),
             julian_to_date(F.col("STCAR_DATA_CARICO")).alias("DATA_CARICO"),
             F.col("STCAR_COD_FORNITORE").cast("string").alias("FORNITORE_COD"),
-            F.col("STCAR_COD_CORRIERE").cast("string").alias("CORRIERE_COD"),
+            F.col("STCAR_COD_CORRIERE").cast("string").alias("VETTORE_COD"),
             F.col("STCAR_TIPO_ORDINE").cast("string").alias("TIPO_ORDINE"),
             F.col("STCAR_TIPO_CONSEGNA").cast("string").alias("TIPO_CONSEGNA"),
             julian_to_date(F.col("STCAR_DATA_EMISS_ORD")).alias("DATA_EMISS_ORDINE"),

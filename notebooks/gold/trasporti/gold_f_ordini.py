@@ -79,7 +79,7 @@ try:
         logger.warning(f"LU_FORNITORE non disponibile in {retail_ms}: aggancio fornitore saltato ({str(e)[:80]})")
 
     # Anagrafiche logistiche proprietarie.
-    # NB: niente LU_CORRIERE — gli ordini/carichi sono INBOUND e non hanno dimensione corriere
+    # NB: niente LU_VETTORE — gli ordini/carichi sono INBOUND e non hanno dimensione corriere
     # (STCAR_COD_CORRIERE risulta sempre nullo; coerente con la scelta su F_CARICO, OP/task #30).
     # Il corriere e' dimensione di spedizione/trasporto (F_PREP_SPED / F_TRASPORTO).
     LOGISTIC_LU = [

@@ -1,9 +1,9 @@
 # Databricks notebook source
 # Area: Dimensioni — Gold
 # Versione: 3.0.0  Data: 2026-06-08
-# Descrizione: LU_CORRIERE (lookup corrieri/vettori). Sorgente: silver.logistica.dim_corriere.
-# Colonne reali Silver: CORRIERE_COD, RAGIONE_SOCIALE, INDIRIZZO, CITTA, PROVINCIA, CAP, FLG_ATTIVO.
-# Chiave: CORRIERE_COD. Pattern: overwrite completo.
+# Descrizione: LU_VETTORE (lookup corrieri/vettori). Sorgente: silver.logistica.dim_vettore.
+# Colonne reali Silver: VETTORE_COD, RAGIONE_SOCIALE, INDIRIZZO, CITTA, PROVINCIA, CAP, FLG_ATTIVO.
+# Chiave: VETTORE_COD. Pattern: overwrite completo.
 
 # COMMAND ----------
 
@@ -29,11 +29,11 @@ run_date = dbutils.widgets.get("run_date")
 
 # COMMAND ----------
 
-NOTEBOOK_NAME  = "gold_lu_corriere"
+NOTEBOOK_NAME  = "gold_lu_vettore"
 SILVER_CATALOG = get_catalog("silver", env)
 GOLD_CATALOG   = get_catalog("gold",   env)
-SOURCE_TABLE   = f"{SILVER_CATALOG}.logistica.dim_corriere"
-TARGET_TABLE   = f"{GOLD_CATALOG}.logistica.LU_CORRIERE"
+SOURCE_TABLE   = f"{SILVER_CATALOG}.logistica.dim_vettore"
+TARGET_TABLE   = f"{GOLD_CATALOG}.logistica.LU_VETTORE"
 
 logger = get_logger(NOTEBOOK_NAME)
 
@@ -45,7 +45,7 @@ try:
     gold = (
         spark.table(SOURCE_TABLE)
         .select(
-            F.col("CORRIERE_COD").cast("string").alias("CORRIERE_COD"),
+            F.col("VETTORE_COD").cast("string").alias("VETTORE_COD"),
             F.col("RAGIONE_SOCIALE").cast("string").alias("RAGIONE_SOCIALE"),
             F.col("INDIRIZZO").cast("string").alias("INDIRIZZO"),
             F.col("CITTA").cast("string").alias("CITTA"),
@@ -53,8 +53,8 @@ try:
             F.col("CAP").cast("string").alias("CAP"),
             F.col("FLG_ATTIVO").cast("string").alias("FLG_ATTIVO"),
         )
-        .filter(F.col("CORRIERE_COD").isNotNull())
-        .dropDuplicates(["CORRIERE_COD"])
+        .filter(F.col("VETTORE_COD").isNotNull())
+        .dropDuplicates(["VETTORE_COD"])
         .withColumn("DWH_UPDATED_AT", F.current_timestamp())
     )
 

@@ -70,7 +70,7 @@ try:
     # ── FASE 3: aggancio dimensioni (codice naturale, fallback -1) ──────────────
     LOGISTIC_LU = [
         ("MAG_SITO_COD",     "LU_SITO",     "SITO_COD"),
-        ("VETTORE_SPED_COD", "LU_CORRIERE", "CORRIERE_COD"),
+        ("VETTORE_SPED_COD", "LU_VETTORE", "VETTORE_COD"),
     ]
     for fk, lu_tab, lu_pk in LOGISTIC_LU:
         try:

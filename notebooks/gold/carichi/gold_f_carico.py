@@ -1,6 +1,8 @@
 # Databricks notebook source
 # Area: Carichi — Gold (Fact F_CARICO)
-# Versione: 4.0.0  Data: 2026-06-10
+# Versione: 4.1.0  Data: 2026-10-21
+#   4.1.0 (ACT_9031): FASE 3c — diagnostici GG_* (vita residua / prev / eff / ritardo consegna)
+#                     calcolati come differenze di date (port legacy ODI, formule da ACT_9029).
 # Grain: 1 riga = riga dettaglio carico (testata x dettaglio).
 #
 # STANDARD 2-NOTEBOOK (Linee guida §1-bis):
@@ -9,7 +11,7 @@
 #   silver.logistica_curated.carico.
 #
 # 🔒 REGOLA D'ORO: legge SOLO da silver.logistica_curated.carico.
-#   NB: il vettore del carico (CORRIERE_COD <- STCAR_COD_CORRIERE) e' agganciato a LU_CORRIERE.
+#   NB: il vettore del carico (VETTORE_COD <- STCAR_COD_CORRIERE) e' agganciato a LU_VETTORE.
 #   Verifica 2026-07-01: CDT_DW.F_CARICO.VETTORE_CARICO_COD e' popolato al 100% (l'assunzione
 #   precedente "0 occorrenze" era errata) -> il vettore inbound va tenuto.
 
@@ -69,6 +71,19 @@ try:
 
     # ── FASE 3b: PES_CARICO/VOL_CARICO da LU_ART_UNITA_LOGISTICA (formula ODI) ───
     fact = attach_carico_peso_volume(spark, fact, retail_ms, logger, NOTEBOOK_NAME)
+
+    # ── FASE 3c: diagnostici GG_* (differenze di date, port legacy ODI — ACT_9031) ──
+    # Formule confermate 100% sui dati CDT_DW (ACT_9029). datediff(fine, inizio) = giorni fine-inizio.
+    # NULL se una delle due date manca (non si forza 0, che sarebbe un falso "stesso giorno").
+    fact = (fact
+            .withColumn("GG_VITA_RESID_ART_CARICO",
+                        F.datediff("DATA_SCAD_CARICO", "DATA_CARICO").cast("int"))
+            .withColumn("GG_PREV_CONS",
+                        F.datediff("DATA_PREV_CONS_FORN", "DATA_EMISSIONE_ORD").cast("int"))
+            .withColumn("GG_EFF_CONS",
+                        F.datediff("DATA_CARICO", "DATA_EMISSIONE_ORD").cast("int"))
+            .withColumn("GG_RITARDO_CONS",
+                        F.datediff("DATA_CARICO", "DATA_PREV_CONS_FORN").cast("int")))
 
     rows = fact.count()
     logger.info(f"F_CARICO righe: {rows}")

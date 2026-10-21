@@ -3,7 +3,7 @@
 # Versione: 3.0.0  Data: 2026-06-08
 # Tabella: A_OUTBOUND_MENSILE (schema gold_prod.logistica_dm)
 # Sorgenti: gold_prod.logistica.F_ORDINI + F_TRASPORTO — solo GROUP BY + funzioni aggregate.
-# Grain: SITO_COD + CORRIERE_COD + ANNO_MESE.
+# Grain: SITO_COD + VETTORE_COD + ANNO_MESE.
 # NB: F_ORDINI non ha quantità (sono nel dettaglio carico) -> conteggi. F_TRASPORTO (FASE 5)
 #     è a grana bolla: porta trasporti/bolle/lead-time, NON QTA/COSTO (mantenuti NULL).
 
@@ -48,14 +48,14 @@ try:
 
     df_o = spark.read.table(SRC_ORDINI).filter(F.col("ANNO_MESE") == F.lit(ANNO_MESE))
     # FASE 5: F_TRASPORTO ora a grana bolla. Rimappo i nomi al nuovo schema e normalizzo
-    # le chiavi di join al naming ordini (MAG_SITO_COD->SITO_COD, VETTORE_SPED_COD->CORRIERE_COD).
+    # le chiavi di join al naming ordini (MAG_SITO_COD->SITO_COD, VETTORE_SPED_COD->VETTORE_COD).
     df_t = (spark.read.table(SRC_TRASP)
             .filter(F.date_format(F.col("DATA_BOLLA_SPED"), "yyyyMM") == F.lit(ANNO_MESE))
             .withColumn("ANNO_MESE", F.lit(ANNO_MESE))
             .withColumnRenamed("MAG_SITO_COD", "SITO_COD")
-            .withColumnRenamed("VETTORE_SPED_COD", "CORRIERE_COD"))
+            .withColumnRenamed("VETTORE_SPED_COD", "VETTORE_COD"))
 
-    ord_agg = (df_o.groupBy("SITO_COD", "CORRIERE_COD", "ANNO_MESE")
+    ord_agg = (df_o.groupBy("SITO_COD", "VETTORE_COD", "ANNO_MESE")
         .agg(
             F.countDistinct("ORDINE_NRO").alias("NUM_ORDINI"),
             F.countDistinct("CARICO_NRO").alias("NUM_CARICHI"),
@@ -67,7 +67,7 @@ try:
     # NB: a grana bolla F_TRASPORTO non porta QTA né COSTO (sono in prep_sped/carico).
     # QTA_TRASPORTATA_TOT e COSTO_STIMATO_EUR_TOT mantenuti NULL per stabilità schema datamart
     # (FASE 5: rivalutare se ricavarli da un'altra fact). Misure disponibili: trasporti/bolle/lead-time.
-    trasp_agg = (df_t.groupBy("SITO_COD", "CORRIERE_COD", "ANNO_MESE")
+    trasp_agg = (df_t.groupBy("SITO_COD", "VETTORE_COD", "ANNO_MESE")
         .agg(
             F.lit(None).cast(DoubleType()).alias("QTA_TRASPORTATA_TOT"),
             F.countDistinct("SP_ID").alias("NUM_TRASPORTI"),
@@ -80,12 +80,12 @@ try:
     out = (ord_agg.alias("o")
         .join(trasp_agg.alias("t"),
               (F.col("o.SITO_COD") == F.col("t.SITO_COD")) &
-              (F.col("o.CORRIERE_COD") == F.col("t.CORRIERE_COD")) &
+              (F.col("o.VETTORE_COD") == F.col("t.VETTORE_COD")) &
               (F.col("o.ANNO_MESE") == F.col("t.ANNO_MESE")),
               "full_outer")
         .select(
             F.coalesce(F.col("o.SITO_COD"), F.col("t.SITO_COD")).cast(StringType()).alias("SITO_COD"),
-            F.coalesce(F.col("o.CORRIERE_COD"), F.col("t.CORRIERE_COD")).cast(StringType()).alias("CORRIERE_COD"),
+            F.coalesce(F.col("o.VETTORE_COD"), F.col("t.VETTORE_COD")).cast(StringType()).alias("VETTORE_COD"),
             F.coalesce(F.col("o.ANNO_MESE"), F.col("t.ANNO_MESE")).cast(StringType()).alias("ANNO_MESE"),
             F.col("NUM_ORDINI").cast(LongType()),
             F.col("NUM_CARICHI").cast(LongType()),
