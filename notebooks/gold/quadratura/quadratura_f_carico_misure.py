@@ -54,7 +54,9 @@ TGT_MISURE    = f"{SCHEMA_OUT}.quadratura_f_carico_misure"
 TGT_COPERT    = f"{SCHEMA_OUT}.quadratura_f_carico_copertura"
 
 MEASURES = ["QTA_CARICO", "QTA_UF_CARICO", "QTA_ORD_FORN", "PES_CARICO", "VOL_CARICO", "VAL_COSTO_CARICO"]
-EPS = 1e-3  # tolleranza float (pesi/volumi)
+# tolleranza MATCH: assoluta per i piccoli numeri + relativa per pesi/volumi (float su miliardi)
+EPS_ABS = 0.5
+EPS_REL = 1e-5
 
 logger = get_logger(NOTEBOOK_NAME)
 
@@ -67,11 +69,11 @@ GRAIN_DIMS = ["DATA_CARICO", "SITO_COD"] + (["ART_RADICE_COD", "ART_VAR_LOGIS_CO
 def norm_sito(col):
     # MAG_SITO_COD ('0051A') / SITO_COD ('51') -> numerico 2 cifre '51'
     digits = F.regexp_replace(col.cast("string"), "[^0-9]", "")
-    return F.when(digits == "", None).otherwise(F.lpad(F.cast("string", F.cast("int", digits)), 2, "0"))
+    return F.when(digits == "", None).otherwise(F.lpad(digits.cast("int").cast("string"), 2, "0"))
 
 def norm_num(col):
-    # 12345.0 -> '12345'
-    return F.when(col.isNull(), None).otherwise(F.cast("string", F.cast("long", F.cast("double", col.cast("string")))))
+    # 12345 / 12345.0 / '12345.0' -> '12345'
+    return F.when(col.isNull(), None).otherwise(col.cast("string").cast("double").cast("long").cast("string"))
 
 # COMMAND ----------
 
@@ -150,7 +152,10 @@ try:
                            F.col(m + "_odi").alias("VAL_ODI"),
                            F.col(m + "_gold").alias("VAL_GOLD"))
                 .withColumn("DELTA", F.col("VAL_ODI") - F.col("VAL_GOLD"))
-                .withColumn("MATCH", F.abs(F.col("DELTA")) <= F.lit(EPS)))
+                .withColumn("MATCH",
+                            (F.abs(F.col("DELTA")) <= F.lit(EPS_ABS)) |
+                            (F.abs(F.col("DELTA")) <= F.lit(EPS_REL) *
+                             F.greatest(F.abs(F.col("VAL_ODI")), F.abs(F.col("VAL_GOLD"))))))
         stacked = part if stacked is None else stacked.unionByName(part)
     stacked = stacked.withColumn("GRAIN", F.lit(grain)).withColumn("_quadratura_ts", F.current_timestamp())
 

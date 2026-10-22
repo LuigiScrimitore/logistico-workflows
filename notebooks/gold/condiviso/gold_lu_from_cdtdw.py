@@ -23,8 +23,8 @@ import sys
 import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
+from utils import resolve_landing_snapshot_path
 from pyspark.sql import functions as F
-from pyspark.sql.utils import AnalysisException
 from delta.tables import DeltaTable
 from datetime import date
 
@@ -69,8 +69,11 @@ MERGE_KEYS = {
 
 # COMMAND ----------
 
-def landing_path(tab):
-    return f"{landing_base_path}/cdtdw-landing/{tab}/{year}/{month}/{day}/"
+def day_path_for(tab):
+    # def con default-arg per legare 'tab' al momento della creazione (evita late-binding nel loop)
+    def _p(d, _tab=tab):
+        return f"{landing_base_path}/cdtdw-landing/{_tab}/{d.year:04d}/{d.month:02d}/{d.day:02d}/"
+    return _p
 
 def detect_format(path):
     if file_format != "auto":
@@ -103,12 +106,16 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {target_schema}")
 
 processed = []
 for legacy_tab, lu_name in LOOKUP_MAP.items():
-    path = landing_path(legacy_tab)
-    try:
-        raw = read_one(path)
-    except AnalysisException:
-        logger.warning(f"{legacy_tab}: file landing assente ({path}) — skip")
+    # Resilienza snapshot FULL (ACT_9034): usa run_date se presente, altrimenti l'ultimo snapshot
+    # disponibile. Rileva l'assenza via fs.ls PRIMA della read (su serverless PATH_NOT_FOUND non e'
+    # la AnalysisException catturabile -> altrimenti il task KO invece di skippare la singola tabella).
+    eff_date, path = resolve_landing_snapshot_path(day_path_for(legacy_tab), run_date, dbutils)
+    if path is None:
+        logger.warning(f"{legacy_tab}: nessuno snapshot landing negli ultimi 7 giorni (atteso {run_date}) — skip")
         continue
+    if eff_date != run_date:
+        logger.warning(f"{legacy_tab}: snapshot {run_date} assente, uso fallback ultimo disponibile {eff_date}")
+    raw = read_one(path)
 
     df = (raw
           .withColumn("_lu_load_date", F.lit(run_date).cast("date"))

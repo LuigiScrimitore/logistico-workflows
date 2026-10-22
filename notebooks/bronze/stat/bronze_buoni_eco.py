@@ -21,10 +21,9 @@ import sys
 import importlib.util as _ilu; sys.path.insert(0, _ilu.find_spec("logistica_utils").submodule_search_locations[0] if _ilu.find_spec("logistica_utils") else "/Workspace/Repos/logistico/logistica_utils")  # wheel: dir del package; fallback locale/Repos
 
 from logging_helper import get_logger
-from utils import get_catalog, add_row_hash, detect_format, read_landing
+from utils import get_catalog, add_row_hash, detect_format, resolve_landing_snapshot_path
 
 from pyspark.sql import functions as F
-from pyspark.sql.utils import AnalysisException
 from delta.tables import DeltaTable
 from datetime import date
 
@@ -77,8 +76,8 @@ year, month, day = run_date.split("-")
 
 # COMMAND ----------
 
-def landing_path():
-    return f"{landing_base_path}/{SOURCE_SYSTEM}-landing/{TABLE_NAME}/{year}/{month}/{day}/"
+def day_path(d):
+    return f"{landing_base_path}/{SOURCE_SYSTEM}-landing/{TABLE_NAME}/{d.year:04d}/{d.month:02d}/{d.day:02d}/"
 
 def read_one(path):
     fmt = detect_format(path, file_format, dbutils)
@@ -96,13 +95,18 @@ def read_one(path):
 
 logger.info(f"START {NOTEBOOK_NAME} | env={env} | run_date={run_date} | MODE={MODE}")
 
-path = landing_path()
-try:
-    raw_df = read_one(path)
-    logger.info(f"Letto: {path}")
-except AnalysisException:
-    logger.warning(f"File non trovato in landing per la run_date: {path} — terminato.")
+# Resilienza snapshot (ACT_9034): usa run_date se presente, altrimenti l'ultimo disponibile.
+# Rileva l'assenza via fs.ls PRIMA della read (su serverless PATH_NOT_FOUND non e' la
+# AnalysisException catturabile -> altrimenti task KO). Per il MERGE il re-processo dell'ultimo
+# giorno e' idempotente (dedup chiave + pruning _row_hash: nessuna riga nuova/riscritta).
+eff_date, path = resolve_landing_snapshot_path(day_path, run_date, dbutils)
+if path is None:
+    logger.warning(f"Nessuno snapshot landing per {TABLE_NAME} negli ultimi 7 giorni (atteso {run_date}). Terminato.")
     dbutils.notebook.exit("NO_DATA")
+if eff_date != run_date:
+    logger.warning(f"Snapshot {run_date} assente per {TABLE_NAME}: fallback a {eff_date} (re-merge idempotente).")
+raw_df = read_one(path)
+logger.info(f"Letto: {path} (giorno {eff_date})")
 
 if SOURCE_COLS:
     raw_df = raw_df.select([c for c in SOURCE_COLS if c in raw_df.columns] + [c for c in ["_source_file"] if c in raw_df.columns])
