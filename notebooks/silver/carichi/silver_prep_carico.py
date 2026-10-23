@@ -1,8 +1,11 @@
 # Databricks notebook source
 # Area: Carichi — Fact carico (grain ETICHETTA)
 # Layer: Silver PREP (Fase 1 modellazione + Fase 2 calcolo)  →  silver.logistica_curated.carico
-# Versione: 2.1.0
-# Data: 2026-10-21
+# Versione: 2.2.0
+# Data: 2026-10-23
+#   2.2.0 (ACT_9035): riconciliazione (bolla, ordine) pesata↔dettaglio PRIMA della join, solo su chiave
+#          rilassata univoca (0 ambigui/0 orfani sul dato) → recupero del residuo ~2% senza fan-out
+#          (copertura F_CARICO ~98%→~100% vs CDT_DW). Join e codice a valle invariati.
 #   2.1.0 (ACT_9033): join testata a livello CARICO (sito,carico) invece di (sito,carico,data,ordine).
 #          Il bronze sto_tes_carichi ha 1 riga/carico → la join su ORDINE scartava ~17% delle etichette
 #          dei carichi multi-ordine (copertura F_CARICO 82%→~99% vs CDT_DW).
@@ -114,6 +117,46 @@ try:
             F.max("NUM_STRATO_PLT_FORN").alias("NUM_STRATO_PLT_FORN"),
             F.max("NUM_IMB_ULT_STRATO_FORN").alias("NUM_IMB_ULT_STRATO_FORN"),
          ))
+
+    # ── (ACT_9035) riconciliazione (bolla, ordine) pesata ↔ dettaglio ─────────────
+    #    ~2% delle pesate portano (BOLLA_NRO, COMMESSA_NRO) non combacianti col dettaglio pur
+    #    avendo l'MSI nello stesso carico → la join su (sito,carico,bolla,ordine,msi) le scartava.
+    #    Qui le riallineo PRIMA della join, adottando i valori del dettaglio SOLO se la chiave
+    #    rilassata è UNIVOCA (verificato sul dato: 0 ambigui, 0 orfani) → recupero senza fan-out e
+    #    con l'articolo corretto. Le pesate ambigue restano invariate (cadono nella join come oggi).
+    _rk = r.select("SITO_COD", "CARICO_NRO", "BOLLA_FORN_NRO", "ORDINE_NRO", "MSI_COD").distinct()
+    _exact = (_rk.select(F.col("SITO_COD").alias("_ex_s"), F.col("CARICO_NRO").alias("_ex_c"),
+                         F.col("BOLLA_FORN_NRO").alias("_ex_b"), F.col("ORDINE_NRO").alias("_ex_o"),
+                         F.col("MSI_COD").alias("_ex_m")).withColumn("_ex", F.lit(1)))
+    _u_ord = (_rk.groupBy("SITO_COD", "CARICO_NRO", "ORDINE_NRO", "MSI_COD")
+              .agg(F.countDistinct("BOLLA_FORN_NRO").alias("_n"), F.first("BOLLA_FORN_NRO").alias("_uo_b"))
+              .filter(F.col("_n") == 1)
+              .select(F.col("SITO_COD").alias("_uo_s"), F.col("CARICO_NRO").alias("_uo_c"),
+                      F.col("ORDINE_NRO").alias("_uo_o"), F.col("MSI_COD").alias("_uo_m"), "_uo_b"))
+    _u_msi = (_rk.groupBy("SITO_COD", "CARICO_NRO", "MSI_COD")
+              .agg(F.countDistinct(F.concat_ws("|", "BOLLA_FORN_NRO", "ORDINE_NRO")).alias("_n"),
+                   F.first("BOLLA_FORN_NRO").alias("_um_b"), F.first("ORDINE_NRO").alias("_um_o"))
+              .filter(F.col("_n") == 1)
+              .select(F.col("SITO_COD").alias("_um_s"), F.col("CARICO_NRO").alias("_um_c"),
+                      F.col("MSI_COD").alias("_um_m"), "_um_b", "_um_o"))
+    _dp = (df_p
+           .join(_exact, (df_p.SITO_COD == F.col("_ex_s")) & (df_p.CARICO_LOG_NRO == F.col("_ex_c")) &
+                 (df_p.BOLLA_NRO == F.col("_ex_b")) & (df_p.COMMESSA_NRO == F.col("_ex_o")) &
+                 (df_p.ART_EAN13 == F.col("_ex_m")), "left")
+           .join(_u_ord, (df_p.SITO_COD == F.col("_uo_s")) & (df_p.CARICO_LOG_NRO == F.col("_uo_c")) &
+                 (df_p.COMMESSA_NRO == F.col("_uo_o")) & (df_p.ART_EAN13 == F.col("_uo_m")), "left")
+           .join(_u_msi, (df_p.SITO_COD == F.col("_um_s")) & (df_p.CARICO_LOG_NRO == F.col("_um_c")) &
+                 (df_p.ART_EAN13 == F.col("_um_m")), "left"))
+    _new_bolla = (F.when(F.col("_ex").isNotNull(), F.col("BOLLA_NRO"))
+                   .when(F.col("_uo_b").isNotNull(), F.col("_uo_b"))
+                   .when(F.col("_um_b").isNotNull(), F.col("_um_b"))
+                   .otherwise(F.col("BOLLA_NRO")))
+    _new_ord = (F.when(F.col("_ex").isNotNull(), F.col("COMMESSA_NRO"))
+                 .when(F.col("_uo_b").isNotNull(), F.col("COMMESSA_NRO"))
+                 .when(F.col("_um_o").isNotNull(), F.col("_um_o"))
+                 .otherwise(F.col("COMMESSA_NRO")))
+    _pcols = df_p.columns
+    df_p = (_dp.withColumn("BOLLA_NRO", _new_bolla).withColumn("COMMESSA_NRO", _new_ord).select(*_pcols))
 
     # ── (p ⋈ r) — la pesata guida il grain (1 riga per etichetta) ─────────────────
     #    PSP_ARTEAN13 (silver ART_EAN13) e' un MSI -> aggancio su MSI_COD del dettaglio.
