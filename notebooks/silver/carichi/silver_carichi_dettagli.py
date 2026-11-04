@@ -150,7 +150,9 @@ try:
     renamed_df = renamed_df.withColumn("ART_COD", F.col("MSI_COD"))
 
     # ── Deduplica: ultima versione per chiave naturale ────────────────────────
-    w = Window.partitionBy("SITO_COD", "CARICO_NRO", "MSI_COD", "MAG_COD").orderBy(F.col("_bronze_insert_ts").desc())
+    # ACT_9038: identità completa della riga, allineata al bronze (Logistix senza PK).
+    w = (Window.partitionBy("SITO_COD", "CARICO_NRO", "DATA_CARICO", "ORDINE_NRO", "MSI_COD", "BOLLA_FORN_NRO", "MAG_COD")
+         .orderBy(F.col("_bronze_insert_ts").desc()))
     deduped_df = (
         renamed_df
         .withColumn("_rn", F.row_number().over(w))
@@ -223,7 +225,10 @@ try:
                 (
                     "tgt.SITO_COD = src.SITO_COD AND "
                     "tgt.CARICO_NRO = src.CARICO_NRO AND "
+                    "tgt.DATA_CARICO <=> src.DATA_CARICO AND "
+                    "tgt.ORDINE_NRO <=> src.ORDINE_NRO AND "
                     "tgt.MSI_COD = src.MSI_COD AND "
+                    "tgt.BOLLA_FORN_NRO <=> src.BOLLA_FORN_NRO AND "
                     "tgt.MAG_COD = src.MAG_COD"
                 )
             )

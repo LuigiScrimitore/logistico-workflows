@@ -98,12 +98,16 @@ try:
         .withColumnRenamed("PSP_TRASFERITO",    "FLG_TRASFERITO_RAW")
     )
 
-    # ── Deduplica: ultima versione per chiave naturale ────────────────────────
-    # LL-034: la chiave NON include DATA_BOLLA — è instabile tra ri-estrazioni (finestra lookback,
-    # LL-024): la stessa pesata viene ri-estratta con DATA_BOLLA/BOLLA_NRO che cambiano (placeholder
-    # -> reale), duplicando la riga e provocando fan-out in F_CARICO (join carichi su BOLLA_NRO).
-    # Identità stabile della pesata = (SITO_COD, CARICO_LOG_NRO, ETICHET_NRO); si tiene l'ultimo snapshot.
-    w = Window.partitionBy("SITO_COD", "CARICO_LOG_NRO", "ETICHET_NRO").orderBy(F.col("_bronze_insert_ts").desc())
+    # ── Deduplica (ACT_9037): identità = (SITO, CARICO, ETICHET, BOLLA) ───────────
+    # Teniamo l'ULTIMA versione per (sito,carico,etichetta,bolla). La bolla resta in chiave per
+    # preservare le etichette multi-bolla legittime (2 bolle fornitore reali = 2 righe, come CDT_DW).
+    # LL-034: la bolla è instabile tra ri-estrazioni (placeholder '1'/'2'/nomi-marca -> bolla reale),
+    # quindi la stessa pesata può comparire con più "bolle" (snapshot). NON si filtrano qui con liste
+    # fisse (fragile: i placeholder non sono solo '1'/'ONE'). La "bolla REALE" è definita a valle in
+    # silver_prep_carico come quella presente nel carico_dettaglio — come il legacy, che consuma la
+    # pesata una sola volta allo stato finale: lì gli snapshot placeholder vengono riallineati alla
+    # bolla reale e deduplicati, senza over-split (bolle fantasma) né fan-out.
+    w = Window.partitionBy("SITO_COD", "CARICO_LOG_NRO", "ETICHET_NRO", "BOLLA_NRO").orderBy(F.col("_bronze_insert_ts").desc())
     deduped_df = (
         renamed_df
         .withColumn("_rn", F.row_number().over(w))
@@ -157,11 +161,14 @@ try:
             .merge(
                 silver_df.alias("src"),
                 (
-                    # LL-034: chiave stabile senza DATA_BOLLA (che varia tra ri-estrazioni) — così le
-                    # ri-estrazioni fanno update-in-place invece di accumulare duplicati.
+                    # ACT_9037: BOLLA_NRO in chiave per tenere le etichette multi-bolla (2 bolle = 2 righe).
+                    # Gli snapshot placeholder restano come righe distinte: la risoluzione alla bolla
+                    # reale avviene a valle in silver_prep_carico (contro il carico_dettaglio), così
+                    # qui non serve alcun cleanup basato su liste fisse di placeholder.
                     "tgt.SITO_COD = src.SITO_COD AND "
                     "tgt.CARICO_LOG_NRO = src.CARICO_LOG_NRO AND "
-                    "tgt.ETICHET_NRO = src.ETICHET_NRO"
+                    "tgt.ETICHET_NRO = src.ETICHET_NRO AND "
+                    "tgt.BOLLA_NRO <=> src.BOLLA_NRO"
                 )
             )
             .whenMatchedUpdateAll()

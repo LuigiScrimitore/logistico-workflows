@@ -56,7 +56,10 @@ TABLE_NAME    = "pesate"
 MODE          = "DELTA_MERGE"
 IS_MULTISITE  = SOURCE_SYSTEM == "logistix"
 
-MERGE_KEYS    = ["MAG_SITO_COD", "PSP_NUMETIC", "PSP_DATABOLLA"]
+# ACT_9038: chiave = identità completa della riga (Logistix non ha PK su STO_TES_CARICHI/STO_RIGHE_CARICO/PESATE).
+# Le chiavi ridotte collassavano righe distinte: testate multi-ordine (LL-039), righe dello stesso MSI su
+# bolle/ordini diversi, seconde pesate di un'etichetta multi-bolla.
+MERGE_KEYS    = ["MAG_SITO_COD", "PSP_NRCARLOG", "PSP_NUMETIC", "PSP_NUMBOL"]
 
 # Schema sorgente esplicito (colonne reali verificate — NON modificare/inventare). Tutte StringType.
 source_schema = StructType([
@@ -152,6 +155,10 @@ bronze_df = (
     raw_df
     .withColumn("_bronze_load_date", F.lit(run_date).cast("date"))
     .withColumn("_bronze_insert_ts", F.current_timestamp())
+    # ACT_9038: giorni in cui la riga è stata vista in landing. Servono a ricostruire lo stato del carico
+    # al giro legacy (spec_legacy_f_carico R-2.3): presente se _first_seen_date <= giorno <= _last_seen_date.
+    .withColumn("_first_seen_date", F.lit(run_date).cast("date"))
+    .withColumn("_last_seen_date", F.lit(run_date).cast("date"))
 )
 if IS_MULTISITE:
     bronze_df = bronze_df.withColumn(
@@ -168,17 +175,25 @@ logger.info(f"Righe lette: {rows_read}")
 
 # PRUNING update (OP-30): firma contenuto riga -> propaga solo il delta reale a valle.
 bronze_df = add_row_hash(bronze_df)
+# ACT_9038: senza PK in sorgente una landing senza dedup può avere righe con la stessa chiave → una sola per
+# chiave, altrimenti il MERGE fallisce (DELTA_MULTIPLE_SOURCE_ROW_MATCHING_TARGET_ROW_IN_MERGE).
+bronze_df = bronze_df.dropDuplicates(MERGE_KEYS)
 
 if not spark.catalog.tableExists(FULL_TARGET):
     bronze_df.write.format("delta").option("mergeSchema", "true").saveAsTable(FULL_TARGET)
     logger.info(f"Creazione iniziale {FULL_TARGET} ({rows_read} righe)")
 else:
     cond = " AND ".join(f"tgt.{k} <=> src.{k}" for k in MERGE_KEYS)
+    seen = {"_first_seen_date": "least(tgt._first_seen_date, src._first_seen_date)",
+            "_last_seen_date": "greatest(tgt._last_seen_date, src._last_seen_date)",
+            "_bronze_load_date": "greatest(tgt._bronze_load_date, src._bronze_load_date)"}
     update_set = {c: f"src.{c}" for c in bronze_df.columns
-                  if c not in MERGE_KEYS and c != "_bronze_insert_ts"}
+                  if c not in MERGE_KEYS and c not in seen and c != "_bronze_insert_ts"}
     (DeltaTable.forName(spark, FULL_TARGET).alias("tgt")
      .merge(bronze_df.alias("src"), cond)
-     .whenMatchedUpdate(condition="tgt._row_hash <> src._row_hash", set=update_set)
+     # contenuto cambiato: aggiorna tutto; in ogni caso la riga è stata vista → aggiorna i giorni di vista
+     .whenMatchedUpdate(condition="tgt._row_hash <> src._row_hash", set={**update_set, **seen})
+     .whenMatchedUpdate(set=seen)
      .whenNotMatchedInsertAll()
      .execute())
     logger.info(f"MERGE INTO {FULL_TARGET} completato")

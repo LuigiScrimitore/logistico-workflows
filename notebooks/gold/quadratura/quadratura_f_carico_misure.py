@@ -9,11 +9,12 @@
 #   - gold_<env>.logistica.F_CARICO (cloud)
 #   - file ODI giornalieri (parquet) estratti da scripts/quadratura/extract_f_carico.py,
 #     caricati su Volume: <odi_ref_base>/AAAA/MM/GG/f_carico.parquet
-#     (colonne usate: MAG_SITO_COD, NUM_DOC_CARICO, NUM_ETICH, GIORNO_DT, le 6 misure,
+#     (colonne usate: MAG_SITO_COD, NUM_DOC_CARICO, NUM_ETICH, GIORNO_DT, le 4 misure del carico (ADR-0029),
 #      ART_RADICE_COD, ART_VAR_LOGIS_COD)
 # OUTPUT (append per giorno):
 #   - gold_<env>.logistica_dm.quadratura_f_carico_misure     (grain × misura → odi, gold, delta, match)
-#   - gold_<env>.logistica_dm.quadratura_f_carico_copertura  (giorno × sito → n_odi, n_gold, n_comuni, %)
+#   - gold_<env>.logistica_dm.quadratura_f_carico_copertura  (giorno × sito → n_odi, n_gold, n_comuni, %,
+#                                                             UF_ODI_TOT/UF_GOLD_TOT su tutte le righe — ACT_9037)
 
 # COMMAND ----------
 
@@ -53,7 +54,7 @@ SCHEMA_OUT    = f"{GOLD_CATALOG}.logistica_dm"
 TGT_MISURE    = f"{SCHEMA_OUT}.quadratura_f_carico_misure"
 TGT_COPERT    = f"{SCHEMA_OUT}.quadratura_f_carico_copertura"
 
-MEASURES = ["QTA_CARICO", "QTA_UF_CARICO", "QTA_ORD_FORN", "PES_CARICO", "VOL_CARICO", "VAL_COSTO_CARICO"]
+MEASURES = ["QTA_CARICO", "QTA_UF_CARICO", "PES_CARICO", "VOL_CARICO"]  # ADR-0029: solo misure del carico
 # tolleranza MATCH: assoluta per i piccoli numeri + relativa per pesi/volumi (float su miliardi)
 EPS_ABS = 0.5
 EPS_REL = 1e-5
@@ -74,6 +75,12 @@ def norm_sito(col):
 def norm_num(col):
     # 12345 / 12345.0 / '12345.0' -> '12345'
     return F.when(col.isNull(), None).otherwise(col.cast("string").cast("double").cast("long").cast("string"))
+
+def norm_bolla(col):
+    # ACT_9037: la bolla può essere NON numerica (es. '2550/00') → niente cast a double (CAST_INVALID_INPUT).
+    # Normalizzazione solo stringa: trim + rimozione di un eventuale '.0' finale ('12345.0' -> '12345').
+    s = F.trim(col.cast("string"))
+    return F.when(col.isNull(), None).otherwise(F.regexp_replace(s, r"\.0+$", ""))
 
 # COMMAND ----------
 
@@ -102,26 +109,28 @@ try:
            .withColumn("DATA_CARICO", F.to_date("GIORNO_DT"))
            .withColumn("SITO_COD", norm_sito(F.col("MAG_SITO_COD")))
            .withColumn("NDOC", norm_num(F.col("NUM_DOC_CARICO")))
-           .withColumn("NETI", norm_num(F.col("NUM_ETICH"))))
+           .withColumn("NETI", norm_num(F.col("NUM_ETICH")))
+           .withColumn("NBOL", norm_bolla(F.col("NUM_BOLLA_FORN"))))   # ACT_9037: bolla nella chiave
     for m in MEASURES:
         odi = odi.withColumn(m, F.coalesce(F.col(m).cast("double"), F.lit(0.0)))
-    odi_keys = ["DATA_CARICO", "SITO_COD", "NDOC", "NETI", "ART_RADICE_COD", "ART_VAR_LOGIS_COD"] + MEASURES
-    odi = odi.select(*odi_keys).dropDuplicates(["DATA_CARICO", "SITO_COD", "NDOC", "NETI"])
+    odi_keys = ["DATA_CARICO", "SITO_COD", "NDOC", "NETI", "NBOL", "ART_RADICE_COD", "ART_VAR_LOGIS_COD"] + MEASURES
+    odi = odi.select(*odi_keys).dropDuplicates(["DATA_CARICO", "SITO_COD", "NDOC", "NETI", "NBOL"])
 
     # ── GOLD: stessa normalizzazione ───────────────────────────────────────────
     gold = (spark.read.table(FACT)
             .filter((F.col("DATA_CARICO") >= F.lit(da)) & (F.col("DATA_CARICO") <= F.lit(a)))
             .withColumn("SITO_COD_N", norm_sito(F.col("SITO_COD")))
             .withColumn("NDOC", norm_num(F.col("NUM_DOC_CARICO")))
-            .withColumn("NETI", norm_num(F.col("NUM_ETICH"))))
+            .withColumn("NETI", norm_num(F.col("NUM_ETICH")))
+            .withColumn("NBOL", norm_bolla(F.col("NUM_BOLLA_FORN"))))   # ACT_9037: bolla nella chiave
     for m in MEASURES:
         gold = gold.withColumn(m, F.coalesce(F.col(m).cast("double"), F.lit(0.0)))
     gold = (gold.select(
-                F.col("DATA_CARICO"), F.col("SITO_COD_N").alias("SITO_COD"), "NDOC", "NETI",
+                F.col("DATA_CARICO"), F.col("SITO_COD_N").alias("SITO_COD"), "NDOC", "NETI", "NBOL",
                 F.col("ART_RADICE_COD"), F.col("ART_VAR_LOGIS_COD"), *MEASURES)
-            .dropDuplicates(["DATA_CARICO", "SITO_COD", "NDOC", "NETI"]))
+            .dropDuplicates(["DATA_CARICO", "SITO_COD", "NDOC", "NETI", "NBOL"]))
 
-    KEY = ["DATA_CARICO", "SITO_COD", "NDOC", "NETI"]
+    KEY = ["DATA_CARICO", "SITO_COD", "NDOC", "NETI", "NBOL"]
 
     # ── COPERTURA (giorno×sito): quante etichette ODI, gold, comuni ────────────
     cov = (odi.select(*KEY).withColumn("_odi", F.lit(1))
@@ -130,6 +139,12 @@ try:
            .agg(F.sum(F.when(F.col("_odi").isNotNull(), 1).otherwise(0)).alias("N_ODI"),
                 F.sum(F.when(F.col("_gold").isNotNull(), 1).otherwise(0)).alias("N_GOLD"),
                 F.sum(F.when(F.col("_odi").isNotNull() & F.col("_gold").isNotNull(), 1).otherwise(0)).alias("N_COMUNI")))
+    # ACT_9037: totali UF su TUTTE le righe di ciascun lato (non solo sulle comuni). Le misure qui sotto
+    # girano sul sottoinsieme comune: righe solo-gold (es. bolle fantasma) gonfiano il gold senza
+    # comparire nel delta → il confronto UF_GOLD_TOT vs UF_ODI_TOT intercetta over/under-count.
+    _tot = lambda df, alias: df.groupBy("DATA_CARICO", "SITO_COD").agg(F.sum("QTA_UF_CARICO").alias(alias))
+    cov = (cov.join(_tot(odi, "UF_ODI_TOT"), ["DATA_CARICO", "SITO_COD"], "left")
+              .join(_tot(gold, "UF_GOLD_TOT"), ["DATA_CARICO", "SITO_COD"], "left"))
     cov = (cov.withColumn("COPERTURA_PCT",
                           F.round(F.when(F.col("N_ODI") > 0, F.col("N_COMUNI") / F.col("N_ODI") * 100).otherwise(None), 1))
               .withColumn("_quadratura_ts", F.current_timestamp()))

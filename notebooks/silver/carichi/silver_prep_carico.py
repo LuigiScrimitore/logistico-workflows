@@ -1,45 +1,46 @@
 # Databricks notebook source
 # Area: Carichi — Fact carico (grain ETICHETTA)
 # Layer: Silver PREP (Fase 1 modellazione + Fase 2 calcolo)  →  silver.logistica_curated.carico
-# Versione: 2.2.0
-# Data: 2026-10-23
-#   2.2.0 (ACT_9035): riconciliazione (bolla, ordine) pesata↔dettaglio PRIMA della join, solo su chiave
-#          rilassata univoca (0 ambigui/0 orfani sul dato) → recupero del residuo ~2% senza fan-out
-#          (copertura F_CARICO ~98%→~100% vs CDT_DW). Join e codice a valle invariati.
-#   2.1.0 (ACT_9033): join testata a livello CARICO (sito,carico) invece di (sito,carico,data,ordine).
-#          Il bronze sto_tes_carichi ha 1 riga/carico → la join su ORDINE scartava ~17% delle etichette
-#          dei carichi multi-ordine (copertura F_CARICO 82%→~99% vs CDT_DW).
-# Descrizione: STRATO PREP — port fedele della logica ODI CDT_ESTR.V_CARICO_ORDINARIO
-#              (fonte reale: DOCS/99. SCRIPT/CDT_ESTR_VISTE.sql + CDT_ESTR.sql).
+# Versione: 3.3.0
+# Data: 2026-10-30
+#   3.3.0 (ACT_9038): ERRART solo per i carichi con data <= ultimo aggiornamento della tabella varianti (copia statica).
+#   3.2.0 (ACT_9038): righe/pesate "del giro" = viste tra la fotografia prima e quella dopo il giro legacy;
+#          pesate = solo quelle timbrate nel giro del carico; etichette rinumerate dopo il giro riportate al numero
+#          letto dal legacy; nessun requisito sulla prima vista della testata.
+#   3.0.0 (ACT_9038): riscritta come CDT_ESTR.V_CARICO_ORDINARIO sullo STATO DEL CARICO AL GIRO LEGACY
+#          (spec DOCS/main/spec_legacy_f_carico.md). Superate le correzioni puntuali ACT_9033 (testata per
+#          carico), ACT_9035 (riconciliazione bolla/ordine), ACT_9037 (filtro snapshot placeholder).
+#   2.4.0 (ACT_9039, ADR-0029): rimosse QTA_ORD_FORN e VAL_COSTO_CARICO (non misure del carico).
+#   2.3.0 (ACT_9037) · 2.2.0 (ACT_9035) · 2.1.0 (ACT_9033): vedi storia git.
+# Descrizione: STRATO PREP — F_CARICO come la produce il legacy.
 #
-#   GRAIN = 1 riga per ETICHETTA (NUM_ETICH), guidato dalle PESATE (non piu' testata⋈dettaglio).
+#   GRAIN = una riga per accoppiamento pesata × gruppo-righe (di fatto etichetta × bolla), come la vista legacy.
 #
-#   MODELLAZIONE (= V_CARICO_ORDINARIO):
-#     r = carico_dettaglio AGGREGATO per (SITO,CARICO,DATA,ORDINE,MSI,RADICE,VAR,BOLLA)
-#         con MAX() su imballi/ora/date, MIN(RICEVITORE).
-#     p = pesata (grain driver: NUM_ETICH = ETICHET_NRO).
-#     t = carico_testata (attributi di testata).
-#     JOIN p⋈r su (SITO, CARICO=CARICO_LOG_NRO, BOLLA=BOLLA_NRO, ORDINE=COMMESSA_NRO,
-#                  MSI=ART_EAN13)  [PSP_ARTEAN13 e' un codice MSI, non un EAN — overlap 100%].
-#     JOIN t⋈r su (SITO, CARICO, DATA, ORDINE).
+#   STATO AL GIRO LEGACY (spec R-1.x, R-2.3; parametro legacy_parity=true):
+#     il legacy elabora un carico una volta sola, nel giro in cui ne timbra la testata (D = giorno di
+#     STCAR_DATA_ESTRAZIONE_DWH), leggendo i record pendenti in quel momento. DataRelay estrae prima del giro,
+#     quindi lo stato letto dal legacy = righe/pesate presenti nell'ultima landing S <= D in cui c'è la testata:
+#     _first_seen_date <= S <= _last_seen_date (colonne del bronze). Esclude da sé le etichette rinumerate o
+#     create dopo il consumo, le pesate cancellate prima del consumo e gli snapshot con bolla placeholder.
+#     Carichi non ancora timbrati: esclusi (il legacy non li ha ancora). legacy_parity=false (dopo lo
+#     spegnimento del legacy): stato più recente, nessun requisito di timbro.
 #
-#   CALCOLO (misure dalla pesata):
-#     QTA_UF_CARICO      = pesata.QTA_UF_RILEVATA
-#     QTA_CARICO         = pesata.NRO_COLLI * pesata.PZ_PER_CARTONE
-#     NUM_IMB_CARICO     = pesata.NRO_COLLI
-#     NUM_IMB_FORN_CARICO= QTA_CARICO / NULLIF(NUM_PZ_IMB_EFF_FORN,0)
-#     NUM_PLT_CARICO     = 1
-#     STESSO_IMB_CARICO_FLAG = (NUM_PZ_IMB_EFF_FORN == NUM_PZ_IMB_SITO)
+#   MODELLAZIONE (= V_CARICO_ORDINARIO, spec R-2.1/R-2.2):
+#     r = righe presenti aggregate per (SITO,CARICO,DATA,ORDINE,MSI,RADICE,VAR,BOLLA): MAX imballi/ora/date,
+#         MIN ricevitore.   t ⋈ r su (SITO, CARICO, DATA, ORDINE)   p ⋈ r su (SITO, CARICO, BOLLA, ORDINE, MSI)
+#     [MSI = radice+variante; PSP_ARTEAN13 è un MSI]. Tutte INNER, nessuna riconciliazione.
+#   SCARTI CDT_SA (spec R-4.x): ERRART 210103 = nessuna versione della variante valida alla data del carico
+#     in CDT_DW.L_ART_VAR_LOGIS_ST (widget art_storicizzata; se assente: avviso e nessuno scarto);
+#     DOPPI 210101 = righe ripetute su (SITO, DATA, DOC, ETICHETTA, BOLLA, RADICE, VARIANTE) → tutte scartate.
 #
-#   Dimensione articolo (decisione 2026-07-02): esposti ART_RADICE_COD + ART_VARIANTE_LOGIS
-#   (ART_VAR_LOGIS_COD). NIENTE ART_COD (obsoleto) ne' varianti storicizzate.
+#   CALCOLO (spec R-2.4): QTA_UF_CARICO = UF rilevata; QTA_CARICO = colli × pz/cartone; NUM_IMB_CARICO = colli;
+#     NUM_IMB_FORN_CARICO = QTA_CARICO / pz imballo fornitore (0 → 1); NUM_PLT_CARICO = 1;
+#     STESSO_IMB_CARICO_FLAG = (pz imballo fornitore == pz imballo sito); NUM_BOLLA_FORN = NVL(bolla,'0').
+#   PES/VOL nel Gold (LU_ART_UNITA_LOGISTICA). VAL_COSTO_CARICO e QTA_ORD_FORN non esposte (ADR-0029).
+#   Dimensione articolo: ART_RADICE_COD + ART_VAR_LOGIS_COD, niente ART_COD né colonne storicizzate.
 #
-#   PES_CARICO / VOL_CARICO: NON qui — calcolati nel Gold da LU_ART_UNITA_LOGISTICA (formula ODI).
-#   VAL_COSTO_CARICO: OPEN POINT OP-CAR-1 (sorgente cndstostock dismessa/2020) -> NULL.
-#   QTA_ORD_FORN: OPEN POINT OP-CAR-3 (distribuzione WL4 CEIL/FLOOR degenere nel legacy) -> 0.
-#
-#   SORGENTI (silver.clean): carico_testata, carico_dettaglio, pesata.
-#   MODE: FULL_OVERWRITE per ANNO_MESE (idempotenza mensile gestita a valle dal Gold).
+#   SORGENTI (silver.clean): carico_testata, carico_dettaglio, pesata (+ _first/_last_seen_date dal bronze).
+#   MODE: overwrite dinamico per ANNO_MESE (ANNO_MESE = mese della DATA_CARICO della testata).
 
 # COMMAND ----------
 
@@ -61,9 +62,14 @@ from datetime import date
 
 dbutils.widgets.dropdown("env", "dev", ["dev", "prod"], "Environment")
 dbutils.widgets.text("run_date", str(date.today()), "Run Date (YYYY-MM-DD)")
+dbutils.widgets.dropdown("legacy_parity", "true", ["true", "false"], "Stato al giro legacy (ACT_9038)")
+dbutils.widgets.text("art_storicizzata", "", "Tabella L_ART_VAR_LOGIS_ST (vuoto = default)")
 
-env      = dbutils.widgets.get("env")
-run_date = dbutils.widgets.get("run_date")
+env           = dbutils.widgets.get("env")
+run_date      = dbutils.widgets.get("run_date")
+LEGACY_PARITY = dbutils.widgets.get("legacy_parity") == "true"
+dbutils.widgets.text("diagnosi_carico", "", "Diagnosi: SITO_COD|CARICO_NRO (vuoto = esecuzione normale)")
+DIAGNOSI = dbutils.widgets.get("diagnosi_carico").strip()
 
 # COMMAND ----------
 
@@ -74,6 +80,8 @@ SRC_TESTATA    = f"{SILVER_CATALOG}.{SCHEMA}.carico_testata"
 SRC_DETTAGLIO  = f"{SILVER_CATALOG}.{SCHEMA}.carico_dettaglio"
 SRC_PESATA     = f"{SILVER_CATALOG}.{SCHEMA}.pesata"
 TARGET_TABLE   = f"{SILVER_CATALOG}.logistica_curated.carico"
+ART_ST_TABLE   = (dbutils.widgets.get("art_storicizzata").strip()
+                  or f"{get_catalog('bronze', env)}.condiviso.l_art_var_logis_st")
 
 ANNO_MESE = run_date[:4] + run_date[5:7]
 
@@ -90,22 +98,47 @@ try:
         logger.warning("Sorgenti carico_testata/dettaglio/pesata assenti. Notebook terminato.")
         dbutils.notebook.exit("NO_SOURCE")
 
+    yyyymmdd = lambda c: F.date_format(c, "yyyyMMdd").cast("int")
     df_t = (spark.read.table(SRC_TESTATA)
             .filter(F.date_format(F.col("DATA_CARICO"), "yyyyMM") == F.lit(ANNO_MESE)))
     df_d = spark.read.table(SRC_DETTAGLIO)
     df_p = spark.read.table(SRC_PESATA)
+    diag = []
+    if DIAGNOSI:  # un solo carico, conteggi a ogni passaggio, nessuna scrittura
+        _ds, _dc = DIAGNOSI.split("|")
+        df_t = df_t.filter((F.col("SITO_COD") == _ds) & (F.col("CARICO_NRO") == _dc))
+        df_d = df_d.filter((F.col("SITO_COD") == _ds) & (F.col("CARICO_NRO") == _dc))
+        df_p = df_p.filter((F.col("SITO_COD") == _ds) & (F.col("CARICO_LOG_NRO") == _dc))
+        diag += [("testate", df_t.count()), ("righe", df_d.count()), ("pesate", df_p.count())]
 
-    # ── (r) dettaglio AGGREGATO a livello (sito,carico,data,ordine,msi,radice,var,bolla) ──
-    #    Riproduce la subquery "r" di V_CARICO_ORDINARIO: MAX() su imballi/ora/date, MIN(ricevitore).
-    r = (df_d.groupBy(
-            "SITO_COD", "CARICO_NRO", "DATA_CARICO", "ORDINE_NRO",
-            "MSI_COD", "ART_RADICE", "ART_VAR", "BOLLA_FORN_NRO",
-         ).agg(
+    # ── stato al giro legacy ──────────────────────────────────────────────────────────────────────────
+    #    D = giorno del timbro della testata: il legacy elabora il carico in quel giro (~06:45) e timbra le pesate
+    #    che legge. Le nostre landing sono fotografie fatte a orari diversi (prima o dopo il giro, a seconda del
+    #    periodo e dell'estrattore), quindi una riga è "del giro" se l'abbiamo vista in un qualsiasi file tra la
+    #    fotografia prima del giro (S = min(D, ultima vista testata)) e quella dopo (P = prima landing dopo D in cui
+    #    c'è la testata): _first_seen_date <= P e _last_seen_date >= S. Per le pesate decide il TIMBRO: il legacy
+    #    timbra esattamente le pesate che legge → si tengono quelle timbrate nel giro del carico (esclude bolle
+    #    provvisorie, pesate cancellate, pesate arrivate dopo). Testate non ancora timbrate: escluse.
+    stamp_day = lambda c: (lambda s_: F.when(F.length(s_) >= 12, F.to_date(F.substring(s_, 1, 8), "yyyyMMdd")))(
+        F.regexp_replace(F.col(c).cast("string"), r"\.0+$", ""))
+    df_t = df_t.withColumn("_D", stamp_day("STCAR_DATA_ESTRAZIONE_DWH"))
+    if LEGACY_PARITY:
+        df_t = (df_t.filter(F.col("_D").isNotNull())
+                    .withColumn("_S", F.least(F.col("_D"), F.col("_last_seen_date")))
+                    .withColumn("_P", F.least(F.greatest(F.date_add(F.col("_D"), 1), F.col("_first_seen_date")),
+                                              F.col("_last_seen_date"))))
+    else:
+        df_t = df_t.withColumn("_S", F.col("_last_seen_date")).withColumn("_P", F.col("_last_seen_date"))
+    nel_giro = lambda a: (F.col(f"{a}._first_seen_date") <= F.col("_P")) & (F.col(f"{a}._last_seen_date") >= F.col("_S"))
+    TK = ["SITO_COD", "CARICO_NRO", "DATA_CARICO", "ORDINE_NRO"]
+    t_s = df_t.select(*TK, "_S", "_P")
+
+    # ── (r) righe del giro, aggregate come la subquery "r" di V_CARICO_ORDINARIO ──
+    r = (df_d.alias("d").join(t_s, TK, "inner").filter(nel_giro("d"))
+         .withColumn("BOLLA_FORN_NRO", F.coalesce(F.col("BOLLA_FORN_NRO").cast(StringType()), F.lit("0")))
+         .groupBy(*TK, "MSI_COD", "ART_RADICE", "ART_VAR", "BOLLA_FORN_NRO").agg(
             F.max("ORA_CARICO").alias("ORA_CARICO"),
             F.min("RICEVITORE_COD").alias("RICEVITORE_COD"),
-            # OP-CAR-3: quantita' ordinata fornitore (SRCAR_QTA_ORDINATA -> silver QTA_ORDINATA).
-            # Portata qui per distribuirla a valle sulla prima etichetta del gruppo ordine-articolo.
-            F.max("QTA_ORDINATA").alias("QTA_ORDINATA_SRC"),
             F.max("DATA_BOLLA_FORN").alias("DATA_BOLLA_FORN"),
             F.max("NUM_PZ_IMB_ORD_FORN").alias("NUM_PZ_IMB_ORD_FORN"),
             F.max("NUM_PZ_IMB_EFF_FORN").alias("NUM_PZ_IMB_EFF_FORN"),
@@ -118,67 +151,103 @@ try:
             F.max("NUM_IMB_ULT_STRATO_FORN").alias("NUM_IMB_ULT_STRATO_FORN"),
          ))
 
-    # ── (ACT_9035) riconciliazione (bolla, ordine) pesata ↔ dettaglio ─────────────
-    #    ~2% delle pesate portano (BOLLA_NRO, COMMESSA_NRO) non combacianti col dettaglio pur
-    #    avendo l'MSI nello stesso carico → la join su (sito,carico,bolla,ordine,msi) le scartava.
-    #    Qui le riallineo PRIMA della join, adottando i valori del dettaglio SOLO se la chiave
-    #    rilassata è UNIVOCA (verificato sul dato: 0 ambigui, 0 orfani) → recupero senza fan-out e
-    #    con l'articolo corretto. Le pesate ambigue restano invariate (cadono nella join come oggi).
-    _rk = r.select("SITO_COD", "CARICO_NRO", "BOLLA_FORN_NRO", "ORDINE_NRO", "MSI_COD").distinct()
-    _exact = (_rk.select(F.col("SITO_COD").alias("_ex_s"), F.col("CARICO_NRO").alias("_ex_c"),
-                         F.col("BOLLA_FORN_NRO").alias("_ex_b"), F.col("ORDINE_NRO").alias("_ex_o"),
-                         F.col("MSI_COD").alias("_ex_m")).withColumn("_ex", F.lit(1)))
-    _u_ord = (_rk.groupBy("SITO_COD", "CARICO_NRO", "ORDINE_NRO", "MSI_COD")
-              .agg(F.countDistinct("BOLLA_FORN_NRO").alias("_n"), F.first("BOLLA_FORN_NRO").alias("_uo_b"))
-              .filter(F.col("_n") == 1)
-              .select(F.col("SITO_COD").alias("_uo_s"), F.col("CARICO_NRO").alias("_uo_c"),
-                      F.col("ORDINE_NRO").alias("_uo_o"), F.col("MSI_COD").alias("_uo_m"), "_uo_b"))
-    _u_msi = (_rk.groupBy("SITO_COD", "CARICO_NRO", "MSI_COD")
-              .agg(F.countDistinct(F.concat_ws("|", "BOLLA_FORN_NRO", "ORDINE_NRO")).alias("_n"),
-                   F.first("BOLLA_FORN_NRO").alias("_um_b"), F.first("ORDINE_NRO").alias("_um_o"))
-              .filter(F.col("_n") == 1)
-              .select(F.col("SITO_COD").alias("_um_s"), F.col("CARICO_NRO").alias("_um_c"),
-                      F.col("MSI_COD").alias("_um_m"), "_um_b", "_um_o"))
-    _dp = (df_p
-           .join(_exact, (df_p.SITO_COD == F.col("_ex_s")) & (df_p.CARICO_LOG_NRO == F.col("_ex_c")) &
-                 (df_p.BOLLA_NRO == F.col("_ex_b")) & (df_p.COMMESSA_NRO == F.col("_ex_o")) &
-                 (df_p.ART_EAN13 == F.col("_ex_m")), "left")
-           .join(_u_ord, (df_p.SITO_COD == F.col("_uo_s")) & (df_p.CARICO_LOG_NRO == F.col("_uo_c")) &
-                 (df_p.COMMESSA_NRO == F.col("_uo_o")) & (df_p.ART_EAN13 == F.col("_uo_m")), "left")
-           .join(_u_msi, (df_p.SITO_COD == F.col("_um_s")) & (df_p.CARICO_LOG_NRO == F.col("_um_c")) &
-                 (df_p.ART_EAN13 == F.col("_um_m")), "left"))
-    _new_bolla = (F.when(F.col("_ex").isNotNull(), F.col("BOLLA_NRO"))
-                   .when(F.col("_uo_b").isNotNull(), F.col("_uo_b"))
-                   .when(F.col("_um_b").isNotNull(), F.col("_um_b"))
-                   .otherwise(F.col("BOLLA_NRO")))
-    _new_ord = (F.when(F.col("_ex").isNotNull(), F.col("COMMESSA_NRO"))
-                 .when(F.col("_uo_b").isNotNull(), F.col("COMMESSA_NRO"))
-                 .when(F.col("_um_o").isNotNull(), F.col("_um_o"))
-                 .otherwise(F.col("COMMESSA_NRO")))
-    _pcols = df_p.columns
-    df_p = (_dp.withColumn("BOLLA_NRO", _new_bolla).withColumn("COMMESSA_NRO", _new_ord).select(*_pcols))
+    # ── (p) pesate lette dal legacy: del giro e timbrate nel giro del loro carico ──
+    s_carico = (df_t.groupBy(F.col("SITO_COD").alias("_sc_sito"), F.col("CARICO_NRO").alias("_sc_carico"))
+                .agg(F.max("_D").alias("_D"), F.min("_S").alias("_S"), F.max("_P").alias("_P")))
+    # per le pesate decide il timbro: basta che esistessero ancora alla fotografia prima del giro (_last_seen >= S);
+    # la prima vista può essere successiva al giro (l'estrattore le mostrava in ritardo, dedup per merge_keys)
+    pc = (df_p.alias("pp")
+          .join(s_carico, (F.col("pp.SITO_COD") == F.col("_sc_sito")) & (F.col("pp.CARICO_LOG_NRO") == F.col("_sc_carico")), "inner")
+          .filter(F.col("pp._last_seen_date") >= F.col("_S"))
+          .withColumn("_pD", stamp_day("pp.PSP_DATA_ESTRAZIONE_DWH")))
+    pcols = df_p.columns
+    if LEGACY_PARITY:
+        p_lette = pc.filter(F.col("_pD") == F.col("_D"))
+        # rinumerata dopo il giro con il timbro già presente: due pesate timbrate identiche (sito, carico, MSI, colli,
+        # UF, bolla) con etichetta diversa che non sono mai esistite insieme (la seconda compare dopo che la prima è
+        # sparita) sono la stessa pesata → si tiene la prima, quella letta dal legacy.
+        TW = ["SITO_COD", "CARICO_LOG_NRO", "ART_EAN13", "NRO_COLLI", "QTA_UF_RILEVATA", "BOLLA_NRO"]
+        prime = p_lette.select(*[F.col(f"pp.{k}").alias(f"_tw_{k}") for k in TW],
+                               F.col("pp.ETICHET_NRO").alias("_tw_etic"), F.col("pp._last_seen_date").alias("_tw_last"))
+        p_lette = (p_lette.join(prime, F.expr(" AND ".join(f"pp.{k} <=> _tw_{k}" for k in TW)) &
+                                (F.col("pp.ETICHET_NRO") != F.col("_tw_etic")) &
+                                (F.col("pp._first_seen_date") > F.col("_tw_last")), "left_anti"))
+        # etichette rinumerate dopo il giro: il legacy ha letto il numero VECCHIO. Nuova = timbrata nel giro ma vista
+        # per la prima volta dopo la fotografia prima del giro; vecchia = mai timbrata, vista prima del giro e
+        # sparita dopo. Stessa pesata = stesso sito, carico, MSI, colli, UF → coppie 1:1 per ordine di etichetta.
+        PK = ["SITO_COD", "CARICO_LOG_NRO", "ART_EAN13", "NRO_COLLI", "QTA_UF_RILEVATA"]
+        nuove = (p_lette.filter(F.col("pp._first_seen_date") > F.col("_S")).select(*[F.col(f"pp.{c}") for c in pcols])
+                 .withColumn("_rk", F.row_number().over(Window.partitionBy(*PK).orderBy("ETICHET_NRO"))))
+        # NB: se la stessa etichetta è tra le timbrate non è una rinumerazione ma una correzione (es. bolla '1' → reale
+        # prima del giro): il legacy ha letto la versione corretta → la vecchia non si usa.
+        etic_lette = p_lette.select(F.col("pp.SITO_COD").alias("_l_sito"), F.col("pp.CARICO_LOG_NRO").alias("_l_car"),
+                                    F.col("pp.ETICHET_NRO").alias("_l_etic")).distinct()
+        vecchie = (pc.filter(F.col("_pD").isNull() & (F.col("pp._first_seen_date") <= F.col("_S")) &
+                             (F.col("pp._last_seen_date") < F.col("_P")))
+                   .select(*[F.col(f"pp.{c}") for c in pcols])
+                   .join(etic_lette, (F.col("SITO_COD") == F.col("_l_sito")) & (F.col("CARICO_LOG_NRO") == F.col("_l_car")) &
+                         (F.col("ETICHET_NRO") == F.col("_l_etic")), "left_anti")
+                   .withColumn("_rk", F.row_number().over(Window.partitionBy(*PK).orderBy("ETICHET_NRO"))))
+        coppie = nuove.alias("n").join(vecchie.alias("v"), PK + ["_rk"], "inner")
+        sostituite = coppie.select(F.col("n.ETICHET_NRO").alias("_rin_etic"), *[F.col(f"n.{k}").alias(f"_rin_{k}") for k in PK])
+        logger.info(f"etichette rinumerate dopo il giro (riportate al numero letto dal legacy): {coppie.count()}")
+        p_base = (p_lette.select(*[F.col(f"pp.{c}") for c in pcols]).alias("b")
+                  .join(sostituite, (F.col("b.ETICHET_NRO") == F.col("_rin_etic")) &
+                        F.expr(" AND ".join(f"b.{k} <=> _rin_{k}" for k in PK)), "left_anti"))
+        p = p_base.unionByName(coppie.select(*[F.col(f"v.{c}") for c in pcols]))
+        if DIAGNOSI:
+            diag += [("testate timbrate", df_t.count()), ("righe del giro (gruppi r)", r.count()),
+                     ("pesate del giro", pc.count()), ("pesate timbrate nel giro", p_lette.count()),
+                     ("coppie rinumerate", coppie.count()), ("pesate finali", p.count())]
+    else:
+        p = pc.select(*[F.col(f"pp.{c}") for c in pcols])
 
-    # ── (p ⋈ r) — la pesata guida il grain (1 riga per etichetta) ─────────────────
-    #    PSP_ARTEAN13 (silver ART_EAN13) e' un MSI -> aggancio su MSI_COD del dettaglio.
-    j = (df_p.alias("p")
+    # ── V_CARICO_ORDINARIO: p ⋈ r (sito, carico, bolla, ordine, MSI) ⋈ t (sito, carico, data, ordine) ──
+    j = (p.alias("p")
          .join(r.alias("r"),
-               (F.col("p.SITO_COD")        == F.col("r.SITO_COD")) &
-               (F.col("p.CARICO_LOG_NRO")  == F.col("r.CARICO_NRO")) &
-               (F.col("p.BOLLA_NRO")       == F.col("r.BOLLA_FORN_NRO")) &
-               (F.col("p.COMMESSA_NRO")    == F.col("r.ORDINE_NRO")) &
-               (F.col("p.ART_EAN13")       == F.col("r.MSI_COD")),
+               (F.col("p.SITO_COD")       == F.col("r.SITO_COD")) &
+               (F.col("p.CARICO_LOG_NRO") == F.col("r.CARICO_NRO")) &
+               (F.col("p.BOLLA_NRO")      == F.col("r.BOLLA_FORN_NRO")) &
+               (F.col("p.COMMESSA_NRO")   == F.col("r.ORDINE_NRO")) &
+               (F.col("p.ART_EAN13")      == F.col("r.MSI_COD")), "inner")
+         .join(df_t.alias("t"),
+               (F.col("r.SITO_COD") == F.col("t.SITO_COD")) & (F.col("r.CARICO_NRO") == F.col("t.CARICO_NRO")) &
+               (F.col("r.DATA_CARICO") == F.col("t.DATA_CARICO")) & (F.col("r.ORDINE_NRO") == F.col("t.ORDINE_NRO")),
                "inner"))
 
-    # ── (⋈ t) attributi di testata a livello CARICO (sito,carico) ─────────────────
-    #    FIX ACT_9033: il bronze sto_tes_carichi ha 1 riga/carico (merge key carico+magazzino
-    #    senza ordine → i carichi multi-ordine sono collassati). Joinare su (DATA,ORDINE) scartava
-    #    ~17% delle etichette (le righe degli ordini collassati). La testata e' un'entita' per-carico:
-    #    join su (SITO,CARICO) → 0 fan-out (dedup di sicurezza) e copertura ~99%.
-    t_carico = df_t.dropDuplicates(["SITO_COD", "CARICO_NRO"])
-    j = (j.join(t_carico.alias("t"),
-                (F.col("r.SITO_COD")   == F.col("t.SITO_COD")) &
-                (F.col("r.CARICO_NRO") == F.col("t.CARICO_NRO")),
-                "inner"))
+    # ── scarto ERRART (210103): variante non valida alla data del carico nell'anagrafica storicizzata ──
+    if spark.catalog.tableExists(ART_ST_TABLE):
+        st = (spark.read.table(ART_ST_TABLE)
+              .select(F.col("ART_RADICE_COD").cast(StringType()).alias("_st_rad"),
+                      F.col("ART_VAR_LOGIS_COD").cast("int").alias("_st_var"),
+                      F.col("ART_ST_DATA_INIZ").cast("int").alias("_st_ini"),
+                      F.col("ART_ST_DATA_FINE").cast("int").alias("_st_fin")))
+        # copia statica: le varianti nate dopo l'ultimo aggiornamento non ci sono → lo scarto vale solo fino a quel giorno
+        art_agg = spark.sql(f"DESCRIBE DETAIL {ART_ST_TABLE}").first()["lastModified"].date()
+        n0 = j.count()
+        k = (j.select(F.col("r.ART_RADICE").cast(StringType()).alias("_k_rad"), F.col("r.ART_VAR").cast("int").alias("_k_var"),
+                      F.col("r.DATA_CARICO").alias("_k_dt")).distinct())
+        art_ok = (k.join(st, (F.col("_k_rad") == F.col("_st_rad")) & (F.col("_k_var") == F.col("_st_var")) &
+                             yyyymmdd(F.col("_k_dt")).between(F.col("_st_ini"), F.col("_st_fin")), "left_semi")
+                   .withColumn("_art_ok", F.lit(True)))
+        j = (j.join(art_ok, (F.col("r.ART_RADICE").cast(StringType()) == F.col("_k_rad")) &
+                            (F.col("r.ART_VAR").cast("int") == F.col("_k_var")) & (F.col("r.DATA_CARICO") == F.col("_k_dt")), "left")
+              .filter(F.col("_art_ok").isNotNull() | (F.col("r.DATA_CARICO") > F.lit(art_agg)))
+              .drop("_k_rad", "_k_var", "_k_dt", "_art_ok"))
+        logger.info(f"ERRART: scartate {n0 - j.count()} righe (variante non valida alla data in {ART_ST_TABLE}, "
+                    f"applicato ai carichi fino al {art_agg})")
+    else:
+        logger.warning(f"ERRART non applicato: {ART_ST_TABLE} assente")
+
+    # ── scarto DOPPI (210101): righe ripetute sulla chiave di V_DOPPI_T_CARICO → escluse tutte ──
+    _wd = Window.partitionBy(F.col("r.SITO_COD"), F.col("r.DATA_CARICO"), F.col("r.CARICO_NRO"), F.col("p.ETICHET_NRO"),
+                             F.col("r.BOLLA_FORN_NRO"), F.col("r.ART_RADICE"), F.col("r.ART_VAR"))
+    j = j.withColumn("_n_doppi", F.count(F.lit(1)).over(_wd))
+    logger.info(f"DOPPI: scartate {j.filter(F.col('_n_doppi') > 1).count()} righe")
+    if DIAGNOSI:
+        diag += [("dopo join e ERRART", j.count()), ("doppi", j.filter(F.col("_n_doppi") > 1).count())]
+        dbutils.notebook.exit(str(diag))
+    j = j.filter(F.col("_n_doppi") == 1).drop("_n_doppi")
 
     # ── FASE 2: calcolo misure (dalla pesata) + campi derivati ────────────────────
     ora_pad = F.lpad(F.coalesce(F.col("ORA_CARICO"), F.lit("0")), 4, "0")
@@ -198,19 +267,6 @@ try:
                     F.when(pz_eff_forn == F.col("r.NUM_PZ_IMB_SITO").cast(DoubleType()),
                            F.lit(1)).otherwise(F.lit(0)).cast(IntegerType()))
         .withColumn("ANNO_MESE", F.date_format(F.col("r.DATA_CARICO"), "yyyyMM"))
-        # ── OP-CAR-3 (opzione B): distribuzione QTA_ORD_FORN ─────────────────────────
-        #    Legacy: SUM(QTA_ORD_FORN) per (sito,ordine,radice,var) = MAX_QTA_ORD (qta ordinata);
-        #    lo split per-riga era rumore (formula WL4 degenere + residuo su prima riga).
-        #    Equivalente pulito: la qta ordinata sta tutta sulla prima etichetta del gruppo, 0 sulle altre.
-        .withColumn("_max_qta_ord",
-                    F.max(F.col("r.QTA_ORDINATA_SRC")).over(
-                        Window.partitionBy(F.col("r.SITO_COD"), F.col("r.ORDINE_NRO"),
-                                           F.col("r.ART_RADICE"), F.col("r.ART_VAR"))))
-        .withColumn("_rn_ord_grp",
-                    F.row_number().over(
-                        Window.partitionBy(F.col("r.SITO_COD"), F.col("r.ORDINE_NRO"),
-                                           F.col("r.ART_RADICE"), F.col("r.ART_VAR"))
-                        .orderBy(F.col("p.ETICHET_NRO").asc_nulls_last())))
         .select(
             F.col("r.SITO_COD").cast(StringType()).alias("SITO_COD"),
             F.col("r.DATA_CARICO").cast(DateType()).alias("DATA_CARICO"),
@@ -231,15 +287,8 @@ try:
             F.col("p.DATA_SCADENZA").cast(DateType()).alias("DATA_SCAD_CARICO"),
             # Chiavi documento
             F.col("r.CARICO_NRO").cast(StringType()).alias("NUM_DOC_CARICO"),
-            F.col("r.BOLLA_FORN_NRO").cast(StringType()).alias("NUM_BOLLA_FORN"),
+            F.col("r.BOLLA_FORN_NRO").cast(StringType()).alias("NUM_BOLLA_FORN"),   # = PSP_NUMBOL (join), NVL '0'
             F.col("r.ORDINE_NRO").cast(StringType()).alias("NUM_ORD_FORN"),
-            # OP-CAR-3 (opzione B): qta ordinata sulla prima etichetta del gruppo (sito,ordine,radice,var),
-            # 0 sulle altre -> SUM per gruppo = MAX_QTA_ORD legacy (quadra vs CDT_DW).
-            # ⚠️ UNITÀ = COLLI/imballi (NON pezzi). Per confronto con QTA_CARICO (pezzi) va
-            #    convertita: pezzi_ordinati = QTA_ORD_FORN × NUM_PZ_IMB_ORD_FORN (vedi A_INBOUND).
-            #    Nome ODI-standard mantenuto per fedeltà/quadratura CDT_DW (vedi OP naming fase 2).
-            F.when(F.col("_rn_ord_grp") == 1, F.coalesce(F.col("_max_qta_ord"), F.lit(0.0)))
-             .otherwise(F.lit(0.0)).cast(DoubleType()).alias("QTA_ORD_FORN"),
             # Struttura imballo/pallet (da dettaglio aggregato)
             F.col("r.NUM_PZ_IMB_ORD_FORN").cast(DoubleType()).alias("NUM_PZ_IMB_ORD_FORN"),
             F.col("r.NUM_PZ_IMB_EFF_FORN").cast(DoubleType()).alias("NUM_PZ_IMB_EFF_FORN"),
@@ -254,13 +303,11 @@ try:
             # Misure carico (dalla pesata)
             # QTA_UF_CARICO = unità di fatturazione ricevute (psp_qta_uf_ril)
             F.col("QTA_UF_CARICO"),
-            # ⚠️ QTA_CARICO UNITÀ = PEZZI (NRO_COLLI × PZ_PER_CARTONE). Ordinato omologo =
-            #    QTA_ORD_FORN × NUM_PZ_IMB_ORD_FORN. Nome ODI-standard (fedeltà/quadratura CDT_DW).
+            # ⚠️ QTA_CARICO UNITÀ = PEZZI (NRO_COLLI × PZ_PER_CARTONE). Nome ODI-standard (quadratura CDT_DW).
             F.col("QTA_CARICO"),
             F.col("NUM_IMB_CARICO"),
             F.col("NUM_IMB_FORN_CARICO"),
             F.col("NUM_PLT_CARICO"),
-            F.lit(None).cast(DoubleType()).alias("VAL_COSTO_CARICO"),  # OP-CAR-1: cndstostock dismesso
             F.col("ANNO_MESE").cast(StringType()).alias("ANNO_MESE"),
         )
         .withColumn("_silver_ts", F.current_timestamp())

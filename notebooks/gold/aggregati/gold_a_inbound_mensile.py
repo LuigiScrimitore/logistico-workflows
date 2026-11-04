@@ -1,6 +1,6 @@
 # Databricks notebook source
 # Area: Aggregati DataMart — Gold
-# Versione: 4.0.0  Data: 2026-07-04
+# Versione: 4.1.0  Data: 2026-10-30 (ACT_9039: via ordinato/ammanco)
 # Tabella: A_INBOUND_MENSILE (schema gold_prod.logistica_dm)
 # Sorgente: gold_prod.logistica.F_CARICO — solo GROUP BY + funzioni aggregate.
 # Grain: FORNITORE_COD + SITO_COD + ANNO_MESE.
@@ -9,9 +9,8 @@
 #   La v3.0 leggeva colonne del vecchio grain "riga dettaglio" ora INESISTENTI
 #   (QTA_ORDINATA, NRO_PZ_CARICATI, SCARTO_QTA, PESO_LORDO, FLAG_SCARTO, CARICO_NRO):
 #   avrebbe dato AnalysisException. Misure ora derivate dalle colonne reali del fact.
-#   Note: QTA_ORDINATA_TOT = pezzi ordinati = SUM(QTA_ORD_FORN[colli] × NUM_PZ_IMB_ORD_FORN);
-#         omogenea con QTA_CARICO_TOT (pezzi) per un ammanco corretto (OP-CAR-3 + fix unità);
-#         VAL_COSTO_CARICO non aggregata (=NULL, OP-CAR-1 sorgente dismessa).
+#   Note: ordinato e ammanco (QTA_ORDINATA_TOT, AMMANCO_QTA_TOT, TASSO_AMMANCO) RIMOSSI (ADR-0029, 2026-10-30):
+#         QTA_ORD_FORN non è più in F_CARICO; verranno derivati dal fatto ordini (OP-CAR-8).
 
 # COMMAND ----------
 
@@ -61,31 +60,17 @@ try:
             F.sum("VOL_CARICO").alias("VOL_CARICO_TOT"),
             F.sum("NUM_PLT_CARICO").alias("NUM_PLT_TOT"),
             F.sum("NUM_IMB_CARICO").alias("NUM_IMB_TOT"),
-            # OP-CAR-3: quantità ordinata in PEZZI. QTA_ORD_FORN è in COLLI (sulla prima
-            # etichetta del gruppo → SUM = colli ordinati); si converte in pezzi con
-            # NUM_PZ_IMB_ORD_FORN (pz/collo) per essere OMOGENEA con QTA_CARICO (pezzi ricevuti).
-            # Verificato: SUM(QTA_ORD_FORN×NUM_PZ_IMB_ORD_FORN) ≈ SUM(QTA_CARICO) (ammanco ~1.5%).
-            F.sum(F.col("QTA_ORD_FORN") * F.coalesce(F.col("NUM_PZ_IMB_ORD_FORN"), F.lit(1)))
-             .alias("QTA_ORDINATA_TOT"),
             F.countDistinct("NUM_DOC_CARICO").alias("NUM_CARICHI"),
             F.count(F.lit(1)).alias("NUM_ETICHETTE"),
         )
-        # AMMANCO = pezzi ordinati − pezzi ricevuti (misura di business, non scarto-di-record).
-        .withColumn("AMMANCO_QTA_TOT", F.col("QTA_ORDINATA_TOT") - F.col("QTA_CARICO_TOT"))
-        .withColumn("TASSO_AMMANCO",
-                    F.when(F.col("QTA_ORDINATA_TOT") > 0,
-                           (F.col("QTA_ORDINATA_TOT") - F.col("QTA_CARICO_TOT")) / F.col("QTA_ORDINATA_TOT")))
     )
 
     out = agg.select(
         F.col("FORNITORE_COD").cast(StringType()),
         F.col("SITO_COD").cast(StringType()),
         F.col("ANNO_MESE").cast(StringType()),
-        F.col("QTA_ORDINATA_TOT").cast(DoubleType()),
         F.col("QTA_CARICO_TOT").cast(DoubleType()),
         F.col("QTA_UF_CARICO_TOT").cast(DoubleType()),
-        F.col("AMMANCO_QTA_TOT").cast(DoubleType()),
-        F.col("TASSO_AMMANCO").cast(DoubleType()),
         F.col("PESO_CARICO_TOT").cast(DoubleType()),
         F.col("VOL_CARICO_TOT").cast(DoubleType()),
         F.col("NUM_PLT_TOT").cast(DoubleType()),

@@ -6,7 +6,7 @@ Fase 3 quadratura (ACT_9029, Q-01). Legge:
   - Gold: gold_dev.logistica.f_carico via SQL warehouse (databricks-sdk, Statement Execution)
 
 Grain di confronto = ETICHETTA: (SITO_COD canonico, NUM_DOC_CARICO, NUM_ETICH).
-Misure (default): QTA_CARICO, QTA_UF_CARICO, QTA_ORD_FORN, PES_CARICO, VOL_CARICO, VAL_COSTO_CARICO.
+Misure (default): QTA_CARICO, QTA_UF_CARICO, PES_CARICO, VOL_CARICO (ADR-0029).
 NESSUNA soglia: evidenzia ogni differenza. Il report è bounded (sommari + campioni), non 25k righe.
 
 NB copertura (OP-QDR-1): il gold DEV copre solo alcuni siti/giorni; le chiavi "solo ODI" sono
@@ -36,7 +36,7 @@ DATA_ROOT = Path(os.environ.get("LOGISTICO_DATA", r"C:\PROGETTI\LOGISTICO_DATA")
 ODI_ROOT  = DATA_ROOT / "quadratura" / "f_carico" / "cdtdw"
 GOLD_TBL  = "gold_dev.logistica.f_carico"
 DEFAULT_WH = "2a59dde49ff3e35d"  # Warehouse-Engineering-Serverless
-MEASURES  = ["QTA_CARICO", "QTA_UF_CARICO", "QTA_ORD_FORN", "PES_CARICO", "VOL_CARICO", "VAL_COSTO_CARICO"]
+MEASURES  = ["QTA_CARICO", "QTA_UF_CARICO", "PES_CARICO", "VOL_CARICO"]  # ADR-0029: solo misure del carico
 
 def norm_sito(v) -> str | None:
     if v is None: return None
