@@ -1,8 +1,9 @@
 # Databricks notebook source
 # Area: Carichi — Fact carico (grain ETICHETTA)
 # Layer: Silver PREP (Fase 1 modellazione + Fase 2 calcolo)  →  silver.logistica_curated.carico
-# Versione: 3.3.0
-# Data: 2026-10-30
+# Versione: 3.4.0
+# Data: 2026-11-05
+#   3.4.0 (ACT_9038): fotografia dopo il giro = primo giorno di landing caricato dopo D (lacuna 31/10–04/11/2026).
 #   3.3.0 (ACT_9038): ERRART solo per i carichi con data <= ultimo aggiornamento della tabella varianti (copia statica).
 #   3.2.0 (ACT_9038): righe/pesate "del giro" = viste tra la fotografia prima e quella dopo il giro legacy;
 #          pesate = solo quelle timbrate nel giro del carico; etichette rinumerate dopo il giro riportate al numero
@@ -123,10 +124,22 @@ try:
         F.regexp_replace(F.col(c).cast("string"), r"\.0+$", ""))
     df_t = df_t.withColumn("_D", stamp_day("STCAR_DATA_ESTRAZIONE_DWH"))
     if LEGACY_PARITY:
-        df_t = (df_t.filter(F.col("_D").isNotNull())
+        # la fotografia dopo il giro è il primo giorno di landing davvero caricato dopo D (non D+1 se mancano giorni);
+        # le righe integrate da Oracle non sono fotografie: prima della prima landing (settembre) resta D+1
+        def _giorni_landing(tab):
+            x = spark.read.table(tab)
+            return (x.filter(~F.coalesce(F.col("_source_file"), F.lit("")).startswith("oracle"))
+                     .select(F.col("_first_seen_date").alias("_g")))
+        giorni = _giorni_landing(SRC_TESTATA).unionByName(_giorni_landing(SRC_PESATA)).distinct()
+        prima_landing = giorni.agg(F.min("_g")).first()[0]
+        dopo = (df_t.select("_D").distinct().join(giorni, F.col("_g") > F.col("_D"))
+                    .groupBy("_D").agg(F.min("_g").alias("_N")))
+        d1 = F.date_add(F.col("_D"), 1)
+        succ = F.when(F.col("_D") >= F.lit(prima_landing), F.coalesce(F.col("_N"), d1)).otherwise(d1)
+        df_t = (df_t.filter(F.col("_D").isNotNull()).join(dopo, "_D", "left")
                     .withColumn("_S", F.least(F.col("_D"), F.col("_last_seen_date")))
-                    .withColumn("_P", F.least(F.greatest(F.date_add(F.col("_D"), 1), F.col("_first_seen_date")),
-                                              F.col("_last_seen_date"))))
+                    .withColumn("_P", F.least(F.greatest(succ, F.col("_first_seen_date")), F.col("_last_seen_date")))
+                    .drop("_N"))
     else:
         df_t = df_t.withColumn("_S", F.col("_last_seen_date")).withColumn("_P", F.col("_last_seen_date"))
     nel_giro = lambda a: (F.col(f"{a}._first_seen_date") <= F.col("_P")) & (F.col(f"{a}._last_seen_date") >= F.col("_S"))
