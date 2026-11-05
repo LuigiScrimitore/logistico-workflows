@@ -1,8 +1,10 @@
 # Databricks notebook source
 # Area: Carichi — Fact carico (grain ETICHETTA)
 # Layer: Silver PREP (Fase 1 modellazione + Fase 2 calcolo)  →  silver.logistica_curated.carico
-# Versione: 3.4.0
+# Versione: 3.5.0
 # Data: 2026-11-05
+#   3.5.0 (ACT_9040): oltre al mese della run_date rielabora i mesi con testate timbrate negli ultimi
+#          giorni_rielaborazione giorni (carichi di fine mese timbrati e completati nel mese dopo).
 #   3.4.0 (ACT_9038): fotografia dopo il giro = primo giorno di landing caricato dopo D (lacuna 31/10–04/11/2026).
 #   3.3.0 (ACT_9038): ERRART solo per i carichi con data <= ultimo aggiornamento della tabella varianti (copia statica).
 #   3.2.0 (ACT_9038): righe/pesate "del giro" = viste tra la fotografia prima e quella dopo il giro legacy;
@@ -41,7 +43,9 @@
 #   Dimensione articolo: ART_RADICE_COD + ART_VAR_LOGIS_COD, niente ART_COD né colonne storicizzate.
 #
 #   SORGENTI (silver.clean): carico_testata, carico_dettaglio, pesata (+ _first/_last_seen_date dal bronze).
-#   MODE: overwrite dinamico per ANNO_MESE (ANNO_MESE = mese della DATA_CARICO della testata).
+#   MODE: overwrite dinamico per ANNO_MESE (ANNO_MESE = mese della DATA_CARICO della testata). Mesi elaborati: quello
+#     della run_date + quelli con testate timbrate (legacy_parity=false: viste per la prima volta) negli ultimi
+#     giorni_rielaborazione giorni (ACT_9040).
 
 # COMMAND ----------
 
@@ -57,7 +61,7 @@ from dq_helper import check_row_count
 from utils import get_catalog
 from pyspark.sql import functions as F, Window
 from pyspark.sql.types import IntegerType, DoubleType, StringType, DateType
-from datetime import date
+from datetime import date, timedelta
 
 # COMMAND ----------
 
@@ -65,10 +69,12 @@ dbutils.widgets.dropdown("env", "dev", ["dev", "prod"], "Environment")
 dbutils.widgets.text("run_date", str(date.today()), "Run Date (YYYY-MM-DD)")
 dbutils.widgets.dropdown("legacy_parity", "true", ["true", "false"], "Stato al giro legacy (ACT_9038)")
 dbutils.widgets.text("art_storicizzata", "", "Tabella L_ART_VAR_LOGIS_ST (vuoto = default)")
+dbutils.widgets.text("giorni_rielaborazione", "5", "Rielabora i mesi con testate timbrate negli ultimi N giorni")
 
 env           = dbutils.widgets.get("env")
 run_date      = dbutils.widgets.get("run_date")
 LEGACY_PARITY = dbutils.widgets.get("legacy_parity") == "true"
+GIORNI_RIELAB = int(dbutils.widgets.get("giorni_rielaborazione") or 0)
 dbutils.widgets.text("diagnosi_carico", "", "Diagnosi: SITO_COD|CARICO_NRO (vuoto = esecuzione normale)")
 DIAGNOSI = dbutils.widgets.get("diagnosi_carico").strip()
 
@@ -100,8 +106,21 @@ try:
         dbutils.notebook.exit("NO_SOURCE")
 
     yyyymmdd = lambda c: F.date_format(c, "yyyyMMdd").cast("int")
-    df_t = (spark.read.table(SRC_TESTATA)
-            .filter(F.date_format(F.col("DATA_CARICO"), "yyyyMM") == F.lit(ANNO_MESE)))
+    stamp_day = lambda c: (lambda s_: F.when(F.length(s_) >= 12, F.to_date(F.substring(s_, 1, 8), "yyyyMMdd")))(
+        F.regexp_replace(F.col(c).cast("string"), r"\.0+$", ""))
+
+    # ── mesi da elaborare (ACT_9040) ──
+    #    il legacy elabora un carico nel giro in cui ne timbra la testata, di solito il giorno dopo la data carico, e la
+    #    fotografia dopo il giro è la landing successiva: i carichi di fine mese (e le timbrature in ritardo) si
+    #    completano nel mese dopo → si rielabora ogni mese con testate timbrate negli ultimi GIORNI_RIELAB giorni.
+    mese = F.date_format(F.col("DATA_CARICO"), "yyyyMM")
+    _rd = date.fromisoformat(run_date)
+    _att = stamp_day("STCAR_DATA_ESTRAZIONE_DWH") if LEGACY_PARITY else F.col("_first_seen_date")
+    MESI = sorted({ANNO_MESE} | {x[0] for x in (spark.read.table(SRC_TESTATA)
+                                                .filter(_att.between(F.lit(_rd - timedelta(days=GIORNI_RIELAB)), F.lit(_rd)))
+                                                .select(mese).distinct().collect()) if x[0]})
+    logger.info(f"mesi elaborati: {MESI} (testate timbrate dal {_rd - timedelta(days=GIORNI_RIELAB)} al {_rd})")
+    df_t = spark.read.table(SRC_TESTATA).filter(mese.isin(MESI))
     df_d = spark.read.table(SRC_DETTAGLIO)
     df_p = spark.read.table(SRC_PESATA)
     diag = []
@@ -120,8 +139,6 @@ try:
     #    c'è la testata): _first_seen_date <= P e _last_seen_date >= S. Per le pesate decide il TIMBRO: il legacy
     #    timbra esattamente le pesate che legge → si tengono quelle timbrate nel giro del carico (esclude bolle
     #    provvisorie, pesate cancellate, pesate arrivate dopo). Testate non ancora timbrate: escluse.
-    stamp_day = lambda c: (lambda s_: F.when(F.length(s_) >= 12, F.to_date(F.substring(s_, 1, 8), "yyyyMMdd")))(
-        F.regexp_replace(F.col(c).cast("string"), r"\.0+$", ""))
     df_t = df_t.withColumn("_D", stamp_day("STCAR_DATA_ESTRAZIONE_DWH"))
     if LEGACY_PARITY:
         # la fotografia dopo il giro è il primo giorno di landing davvero caricato dopo D (non D+1 se mancano giorni);
@@ -328,7 +345,7 @@ try:
     )
 
     rows_out = prep_df.count()
-    logger.info(f"Righe prep carico (grain etichetta) ANNO_MESE={ANNO_MESE}: {rows_out}")
+    logger.info(f"Righe prep carico (grain etichetta) mesi {MESI}: {rows_out}")
     check_row_count(prep_df, min_rows=0, notebook_name=NOTEBOOK_NAME)
 
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SILVER_CATALOG}.logistica_curated")
@@ -340,7 +357,7 @@ try:
             .saveAsTable(TARGET_TABLE))
         logger.info(f"CTAS {TARGET_TABLE} ({rows_out} righe)")
     else:
-        # Run successivi: dynamic partition overwrite (solo ANNO_MESE corrente).
+        # Run successivi: dynamic partition overwrite (solo i mesi elaborati).
         # Opzione del writer Delta: su serverless (Spark Connect) `spark.conf.set` di
         # spark.sql.sources.partitionOverwriteMode e' vietata -> si usa l'option del writer.
         (prep_df.write.format("delta").mode("overwrite")
